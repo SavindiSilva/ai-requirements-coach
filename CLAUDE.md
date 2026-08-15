@@ -171,7 +171,7 @@ ai-requirements-coach/
 │   ├── models/
 │   ├── schemas/
 │   ├── services/
-│   ├── agents/
+│   ├── agent/
 │   ├── jira/
 │   ├── rag/
 │   └── db/

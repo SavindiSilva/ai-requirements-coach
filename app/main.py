@@ -50,12 +50,14 @@ def health_check():
 
 
 # --- Routers get wired in here as each module is built ---
+from app.analysis.router import router as analysis_router
+
+app.include_router(analysis_router, prefix="/api", tags=["analysis"])
+
 # from app.jira.router import router as jira_router
 # from app.tickets.router import router as tickets_router
-# from app.analysis.router import router as analysis_router
 # from app.coaching.router import router as coaching_router
 #
 # app.include_router(jira_router, prefix="/jira", tags=["jira"])
 # app.include_router(tickets_router, prefix="/tickets", tags=["tickets"])
-# app.include_router(analysis_router, prefix="/analysis", tags=["analysis"])
 # app.include_router(coaching_router, prefix="/coaching", tags=["coaching"])
