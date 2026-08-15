@@ -27,15 +27,16 @@ def _compute_overall_readiness(content: AnalysisContent) -> float:
 
 def analyze_requirement_node(state: AgentState) -> AgentState:
     ticket = state["ticket"]
+    coaching_history = state.get("coaching_history")
 
     system_prompt = build_system_prompt()
-    user_prompt = build_user_prompt(ticket)
+    user_prompt = build_user_prompt(ticket, coaching_history)
     content = run_structured_analysis(system_prompt, user_prompt)
 
     overall_readiness = _compute_overall_readiness(content)
     analysis = AnalysisResult(**content.model_dump(), overall_readiness=overall_readiness)
 
-    return {"ticket": ticket, "analysis": analysis}
+    return {"ticket": ticket, "analysis": analysis, "coaching_history": coaching_history}
 
 
 def build_graph():
@@ -56,7 +57,10 @@ def get_graph():
     return _compiled_graph
 
 
-def analyze_ticket(ticket: TicketInput) -> AnalysisResult:
+def analyze_ticket(
+    ticket: TicketInput,
+    coaching_history: list[tuple[str, str]] | None = None,
+) -> AnalysisResult:
     graph = get_graph()
-    final_state = graph.invoke({"ticket": ticket, "analysis": None})
+    final_state = graph.invoke({"ticket": ticket, "analysis": None, "coaching_history": coaching_history})
     return final_state["analysis"]

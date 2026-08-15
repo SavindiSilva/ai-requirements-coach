@@ -5,8 +5,12 @@ existing Phase 1 analysis, pick the weakest criterion, and ask one focused
 clarification question.
 
 Phase 2B covers the second step: receive and store the user's answer to
-that question. Re-analysis, the stop condition and the final improved
-requirement are later milestones.
+that question.
+
+Phase 2C covers the third step: re-run the Phase 1 analysis using the
+original ticket plus the accumulated coaching Q&A history, and replace the
+session's analysis with the result. The stop condition and the final
+improved requirement are later milestones.
 """
 
 from fastapi import APIRouter, HTTPException
@@ -16,9 +20,24 @@ from app.agent.llm import LLMAnalysisError
 from app.analysis.schemas import TicketInput
 from app.coaching.llm import CoachingLLMError, generate_clarification_question
 from app.coaching.prompts import build_question_system_prompt, build_question_user_prompt
-from app.coaching.schemas import CoachingMessageResponse, CoachingStartResponse, CurrentScores, MessageRequest
+from app.coaching.schemas import (
+    CoachingMessageResponse,
+    CoachingStartResponse,
+    CurrentScores,
+    MessageRequest,
+    ReanalyzeResponse,
+)
 from app.coaching.selection import gather_relevant_issues, select_weakest_criterion
-from app.coaching.store import NoUnansweredQuestionError, SessionNotFoundError, create_session, record_answer
+from app.coaching.store import (
+    InconsistentHistoryError,
+    NoAnsweredQuestionsError,
+    NoUnansweredQuestionError,
+    SessionNotFoundError,
+    create_session,
+    get_session_for_reanalysis,
+    record_answer,
+    replace_analysis,
+)
 
 router = APIRouter()
 
@@ -53,6 +72,33 @@ def start_coaching(ticket: TicketInput) -> CoachingStartResponse:
             open_questions=analysis.open_questions.score,
             scope_definition=analysis.scope_definition.score,
         ),
+    )
+
+
+@router.post("/coaching/{session_id}/reanalyze", response_model=ReanalyzeResponse)
+def reanalyze_coaching_session(session_id: str) -> ReanalyzeResponse:
+    try:
+        session = get_session_for_reanalysis(session_id)
+    except SessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (NoAnsweredQuestionsError, InconsistentHistoryError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    coaching_history = list(zip(session["questions_asked"], session["answers"]))
+
+    try:
+        new_analysis = analyze_ticket(session["ticket"], coaching_history=coaching_history)
+    except LLMAnalysisError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    session = replace_analysis(session_id, new_analysis)
+
+    return ReanalyzeResponse(
+        session_id=session_id,
+        analysis=session["analysis"],
+        question_count=session["question_count"],
+        questions_asked=session["questions_asked"],
+        answers=session["answers"],
     )
 
 

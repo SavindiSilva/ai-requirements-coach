@@ -42,6 +42,13 @@ ordered by impact (highest-impact first). For each, give the question and a \
 short reason explaining why it matters. Provide at most \
 {max_questions} questions, and fewer if the ticket does not need that many.
 
+If the ticket text below includes a "Previous clarification" section, treat \
+those question/answer pairs as authoritative new information about the \
+requirement, not just resolved ambiguity. Reconsider all four criteria in \
+light of that information - a clarification answer can affect Acceptance \
+Criteria, Open Questions or Scope Definition just as much as Requirement \
+Clarity, not only the criterion the question was originally asked about.
+
 You must respond only by calling the `submit_requirement_analysis` tool \
 with the complete structured analysis. Do not respond in plain text.
 """
@@ -51,10 +58,21 @@ def build_system_prompt() -> str:
     return _SYSTEM_PROMPT_TEMPLATE.format(max_questions=settings.max_clarification_rounds)
 
 
-def build_user_prompt(ticket: TicketInput) -> str:
-    return (
+def build_user_prompt(
+    ticket: TicketInput,
+    coaching_history: list[tuple[str, str]] | None = None,
+) -> str:
+    prompt = (
         "Analyze this ticket:\n\n"
         f"Title: {ticket.title}\n\n"
         f"Description:\n{ticket.description}\n\n"
-        "Call the submit_requirement_analysis tool with your full structured analysis."
     )
+
+    if coaching_history:
+        history_text = "\n\n".join(
+            f"Question: {question}\nAnswer: {answer}" for question, answer in coaching_history
+        )
+        prompt += f"Previous clarification:\n\n{history_text}\n\n"
+
+    prompt += "Call the submit_requirement_analysis tool with your full structured analysis."
+    return prompt

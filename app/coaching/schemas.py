@@ -7,6 +7,8 @@ via forced tool-use for the coaching question step, mirroring the
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.analysis.schemas import AnalysisResult
+
 
 class ClarificationQuestionOutput(BaseModel):
     question: str = Field(..., min_length=1)
@@ -46,3 +48,11 @@ class CoachingMessageResponse(BaseModel):
     questions_asked: list[str]
     answers: list[str]
     current_scores: CurrentScores
+
+
+class ReanalyzeResponse(BaseModel):
+    session_id: str
+    analysis: AnalysisResult
+    question_count: int
+    questions_asked: list[str]
+    answers: list[str]

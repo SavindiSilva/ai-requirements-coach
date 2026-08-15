@@ -13,9 +13,10 @@ call; only the "successful answer submission" test follows the full
 start -> message flow, as required by the Phase 2B spec.
 """
 
+from app.agent.llm import LLMAnalysisError
 from app.analysis.schemas import AnalysisResult, CriterionScore, TicketInput
 from app.coaching.selection import select_weakest_criterion
-from app.coaching.store import create_session, get_session
+from app.coaching.store import create_session, get_session, record_answer
 from app.main import app
 from fastapi.testclient import TestClient
 
@@ -172,3 +173,131 @@ def test_coaching_message_no_unanswered_question_returns_400():
     assert session["question_count"] == 1
     assert session["questions_asked"] == ["What specific event should trigger a notification?"]
     assert session["answers"] == ["When a new message is received."]
+
+
+# --- Phase 2C: re-analysis ---
+#
+# Re-analysis is pure state mutation plus one Claude call, so all error/
+# validation paths below monkeypatch app.coaching.router.analyze_ticket to
+# prove Claude is never invoked, instead of spending a real API call per
+# case. Only the success test makes a real call, as the Phase 2C spec
+# allows for verifying the integration end to end.
+
+
+def _create_answered_session(
+    question: str = "What specific event should trigger a notification?",
+    answer: str = "When a new message is received.",
+) -> str:
+    ticket = TicketInput(**VAGUE_TICKET)
+    analysis = _make_analysis(rc=0, ac=1, oq=0, sd=2)
+    session_id = create_session(ticket, analysis, question, "The trigger event is undefined.")
+    record_answer(session_id, answer)
+    return session_id
+
+
+def test_coaching_reanalyze_successful_reanalysis():
+    question = "What specific event should trigger a notification?"
+    answer = "When a new message is received."
+    session_id = _create_answered_session(question=question, answer=answer)
+    original_ticket = get_session(session_id)["ticket"]
+
+    response = client.post(f"/api/coaching/{session_id}/reanalyze")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["session_id"] == session_id
+
+    analysis = data["analysis"]
+    for key in ("requirement_clarity", "acceptance_criteria", "open_questions", "scope_definition"):
+        assert 0 <= analysis[key]["score"] <= 3
+        assert analysis[key]["evidence"].strip()
+    assert 0 <= analysis["overall_readiness"] <= 3
+
+    assert data["question_count"] == 1
+    assert data["questions_asked"] == [question]
+    assert data["answers"] == [answer]
+
+    session = get_session(session_id)
+    assert session["ticket"] == original_ticket
+    assert session["question_count"] == 1
+    assert session["questions_asked"] == [question]
+    assert session["answers"] == [answer]
+    assert session["current_question"] is None
+    assert session["current_why"] is None
+
+
+def test_coaching_reanalyze_unknown_session_returns_404():
+    response = client.post("/api/coaching/nonexistent-session/reanalyze")
+    assert response.status_code == 404
+    assert get_session("nonexistent-session") is None
+
+
+def test_coaching_reanalyze_no_answered_questions_returns_400(monkeypatch):
+    session_id = _create_session_directly()  # question_count=0, no answers yet
+    original_analysis = get_session(session_id)["analysis"]
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("Claude must not be called when there is nothing to re-analyse")
+
+    monkeypatch.setattr("app.coaching.router.analyze_ticket", _fail_if_called)
+
+    response = client.post(f"/api/coaching/{session_id}/reanalyze")
+    assert response.status_code == 400
+    assert "answered" in response.json()["detail"].lower()
+
+    session = get_session(session_id)
+    assert session["analysis"] is original_analysis
+    assert session["question_count"] == 0
+    assert session["questions_asked"] == []
+    assert session["answers"] == []
+
+
+def test_coaching_reanalyze_inconsistent_history_returns_400(monkeypatch):
+    # Both lists non-empty but mismatched in length: this must be reported
+    # as "inconsistent history", not "no answered questions" (that rule
+    # only fires when questions_asked or answers is empty - see the "no
+    # answered questions" test above for that case).
+    session_id = _create_session_directly()
+    session = get_session(session_id)
+    session["questions_asked"] = ["Question 1", "Question 2"]
+    session["answers"] = ["Answer 1"]
+    session["question_count"] = 2
+    original_analysis = session["analysis"]
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("Claude must not be called when history is inconsistent")
+
+    monkeypatch.setattr("app.coaching.router.analyze_ticket", _fail_if_called)
+
+    response = client.post(f"/api/coaching/{session_id}/reanalyze")
+    assert response.status_code == 400
+    assert "inconsist" in response.json()["detail"].lower()
+
+    session_after = get_session(session_id)
+    assert session_after["analysis"] is original_analysis
+    assert session_after["questions_asked"] == ["Question 1", "Question 2"]
+    assert session_after["answers"] == ["Answer 1"]
+    assert session_after["question_count"] == 2
+
+
+def test_coaching_reanalyze_claude_failure_returns_502_and_preserves_state(monkeypatch):
+    session_id = _create_answered_session()
+    session = get_session(session_id)
+    original_analysis = session["analysis"]
+    original_questions_asked = list(session["questions_asked"])
+    original_answers = list(session["answers"])
+    original_question_count = session["question_count"]
+
+    def _raise(*args, **kwargs):
+        raise LLMAnalysisError("simulated Claude failure")
+
+    monkeypatch.setattr("app.coaching.router.analyze_ticket", _raise)
+
+    response = client.post(f"/api/coaching/{session_id}/reanalyze")
+    assert response.status_code == 502
+
+    session_after = get_session(session_id)
+    assert session_after["analysis"] is original_analysis
+    assert session_after["questions_asked"] == original_questions_asked
+    assert session_after["answers"] == original_answers
+    assert session_after["question_count"] == original_question_count

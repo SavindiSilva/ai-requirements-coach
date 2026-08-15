@@ -22,6 +22,14 @@ class NoUnansweredQuestionError(Exception):
     """Raised when a session has no pending clarification question to answer."""
 
 
+class NoAnsweredQuestionsError(Exception):
+    """Raised when re-analysis is requested but no question has been answered yet."""
+
+
+class InconsistentHistoryError(Exception):
+    """Raised when questions_asked and answers have mismatched lengths."""
+
+
 def create_session(
     ticket: TicketInput,
     analysis: AnalysisResult,
@@ -67,4 +75,35 @@ def record_answer(session_id: str, answer: str) -> CoachingSessionState:
     session["current_question"] = None
     session["current_why"] = None
 
+    return session
+
+
+def get_session_for_reanalysis(session_id: str) -> CoachingSessionState:
+    """Validate and return a session ready for re-analysis (Phase 2C).
+
+    Raises without mutating anything if the session doesn't exist, has no
+    answered question yet, or its question/answer history is inconsistent.
+    """
+    session = _SESSIONS.get(session_id)
+    if session is None:
+        raise SessionNotFoundError(f"No coaching session found for session_id '{session_id}'.")
+
+    if session["question_count"] == 0 or not session["questions_asked"] or not session["answers"]:
+        raise NoAnsweredQuestionsError(
+            f"There is no answered coaching question available for re-analysis in session '{session_id}'."
+        )
+
+    if len(session["questions_asked"]) != len(session["answers"]):
+        raise InconsistentHistoryError(
+            f"Coaching history is inconsistent for session '{session_id}': "
+            f"{len(session['questions_asked'])} question(s) but {len(session['answers'])} answer(s)."
+        )
+
+    return session
+
+
+def replace_analysis(session_id: str, analysis: AnalysisResult) -> CoachingSessionState:
+    """Replace a session's analysis in place, leaving all other fields untouched."""
+    session = _SESSIONS[session_id]
+    session["analysis"] = analysis
     return session
