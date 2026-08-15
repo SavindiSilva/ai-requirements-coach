@@ -5,7 +5,7 @@ via forced tool-use for the coaching question step, mirroring the
 `AnalysisContent` pattern in app/analysis/schemas.py.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ClarificationQuestionOutput(BaseModel):
@@ -24,4 +24,25 @@ class CoachingStartResponse(BaseModel):
     session_id: str
     question: str
     why: str
+    current_scores: CurrentScores
+
+
+class MessageRequest(BaseModel):
+    answer: str = Field(..., min_length=1)
+
+    @field_validator("answer")
+    @classmethod
+    def answer_must_not_be_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("answer must not be empty or whitespace-only")
+        return v
+
+
+class CoachingMessageResponse(BaseModel):
+    session_id: str
+    question: str
+    answer: str
+    question_count: int
+    questions_asked: list[str]
+    answers: list[str]
     current_scores: CurrentScores

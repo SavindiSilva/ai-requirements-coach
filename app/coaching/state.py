@@ -14,6 +14,11 @@ from app.analysis.schemas import AnalysisResult, TicketInput
 class CoachingSessionState(TypedDict):
     ticket: TicketInput
     analysis: AnalysisResult
-    questions_asked: list[dict]
-    answers: list[dict]
+    questions_asked: list[str]
+    answers: list[str]
     question_count: int
+    # The clarification question awaiting an answer (Phase 2A generates one,
+    # Phase 2B moves it into questions_asked/answers once answered). None
+    # when there is no pending question.
+    current_question: str | None
+    current_why: str | None
