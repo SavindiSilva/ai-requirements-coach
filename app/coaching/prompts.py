@@ -34,10 +34,20 @@ def build_question_user_prompt(
     analysis: AnalysisResult,
     criterion_key: str,
     issues: list[str],
+    previous_questions: list[str] | None = None,
 ) -> str:
     criterion = getattr(analysis, criterion_key)
     label = CRITERION_LABELS[criterion_key]
     issues_text = "\n".join(f"- {issue}" for issue in issues) or "- (no specific findings listed)"
+
+    previous_text = ""
+    if previous_questions:
+        previous_list = "\n".join(f"- {question}" for question in previous_questions)
+        previous_text = (
+            "Questions already asked and answered earlier in this coaching "
+            f"session (do not repeat these or ask something that overlaps "
+            f"with them):\n{previous_list}\n\n"
+        )
 
     return (
         "Ticket:\n"
@@ -46,6 +56,7 @@ def build_question_user_prompt(
         f"Weakest criterion: {label} (score {criterion.score}/3)\n"
         f"Evidence for this score: {criterion.evidence}\n\n"
         f"Findings related to this criterion:\n{issues_text}\n\n"
+        f"{previous_text}"
         "Call the submit_clarification_question tool with ONE focused question "
         "and a short why explanation targeting the most important unresolved "
         "issue above."

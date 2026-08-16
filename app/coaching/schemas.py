@@ -56,3 +56,13 @@ class ReanalyzeResponse(BaseModel):
     question_count: int
     questions_asked: list[str]
     answers: list[str]
+
+
+class CoachingNextResponse(BaseModel):
+    session_id: str
+    is_complete: bool
+    stop_reason: str | None
+    question: str | None
+    why: str | None
+    question_count: int
+    current_scores: CurrentScores

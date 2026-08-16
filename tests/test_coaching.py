@@ -15,8 +15,10 @@ start -> message flow, as required by the Phase 2B spec.
 
 from app.agent.llm import LLMAnalysisError
 from app.analysis.schemas import AnalysisResult, CriterionScore, TicketInput
+from app.coaching.schemas import ClarificationQuestionOutput
 from app.coaching.selection import select_weakest_criterion
 from app.coaching.store import create_session, get_session, record_answer
+from app.core.config import settings
 from app.main import app
 from fastapi.testclient import TestClient
 
@@ -301,3 +303,192 @@ def test_coaching_reanalyze_claude_failure_returns_502_and_preserves_state(monke
     assert session_after["questions_asked"] == original_questions_asked
     assert session_after["answers"] == original_answers
     assert session_after["question_count"] == original_question_count
+
+
+# --- Phase 2D: decide whether to continue coaching ---
+#
+# should_stop_coaching is pure and LLM-free (like select_weakest_criterion),
+# so the stop/continue decision itself needs no mocking. Every test below
+# monkeypatches app.coaching.router.generate_clarification_question so a
+# real Claude call only happens when a test is specifically checking the
+# continue path's question-generation wiring.
+
+
+def _create_next_ready_session(analysis: AnalysisResult, question_count: int = 1) -> str:
+    """Build a session in the state POST /next expects: an answered round,
+    no pending question, consistent history, and the given analysis (as if
+    Phase 2C re-analysis had just produced it)."""
+    session_id = _create_answered_session()
+    session = get_session(session_id)
+    session["analysis"] = analysis
+    session["question_count"] = question_count
+    session["questions_asked"] = [f"Question {i}" for i in range(question_count)]
+    session["answers"] = [f"Answer {i}" for i in range(question_count)]
+    return session_id
+
+
+def test_coaching_next_continues_when_below_threshold(monkeypatch):
+    analysis = _make_analysis(rc=1, ac=1, oq=0, sd=2)  # min score 0 < threshold 2
+    session_id = _create_next_ready_session(analysis, question_count=1)
+
+    def _fake_generate(system_prompt, user_prompt):
+        return ClarificationQuestionOutput(
+            question="What does 'something happens' mean?",
+            why="The triggering event is still undefined.",
+        )
+
+    monkeypatch.setattr("app.coaching.router.generate_clarification_question", _fake_generate)
+
+    response = client.post(f"/api/coaching/{session_id}/next")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["session_id"] == session_id
+    assert data["is_complete"] is False
+    assert data["stop_reason"] is None
+    assert data["question"] == "What does 'something happens' mean?"
+    assert data["why"] == "The triggering event is still undefined."
+    assert data["question_count"] == 1
+
+    session = get_session(session_id)
+    assert session["question_count"] == 1
+    assert session["questions_asked"] == ["Question 0"]
+    assert session["answers"] == ["Answer 0"]
+    assert session["current_question"] == "What does 'something happens' mean?"
+    assert session["current_why"] == "The triggering event is still undefined."
+    assert session["is_complete"] is False
+    assert session["stop_reason"] is None
+
+
+def test_coaching_next_stops_when_readiness_threshold_met(monkeypatch):
+    analysis = _make_analysis(rc=2, ac=2, oq=2, sd=2)  # min score 2 >= threshold 2
+    session_id = _create_next_ready_session(analysis, question_count=1)
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("Claude must not be called when the stop condition is met")
+
+    monkeypatch.setattr("app.coaching.router.generate_clarification_question", _fail_if_called)
+
+    response = client.post(f"/api/coaching/{session_id}/next")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["is_complete"] is True
+    assert data["stop_reason"] == "readiness_threshold_met"
+    assert data["question"] is None
+    assert data["why"] is None
+
+    session = get_session(session_id)
+    assert session["is_complete"] is True
+    assert session["stop_reason"] == "readiness_threshold_met"
+    assert session["current_question"] is None
+    assert session["current_why"] is None
+    # question_count/questions_asked/answers must be untouched by stopping.
+    assert session["question_count"] == 1
+    assert session["questions_asked"] == ["Question 0"]
+    assert session["answers"] == ["Answer 0"]
+
+
+def test_coaching_next_stops_when_max_questions_reached(monkeypatch):
+    analysis = _make_analysis(rc=0, ac=0, oq=0, sd=0)  # well below readiness threshold
+    session_id = _create_next_ready_session(analysis, question_count=settings.max_clarification_rounds)
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("Claude must not be called when the stop condition is met")
+
+    monkeypatch.setattr("app.coaching.router.generate_clarification_question", _fail_if_called)
+
+    response = client.post(f"/api/coaching/{session_id}/next")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["is_complete"] is True
+    assert data["stop_reason"] == "max_questions_reached"
+    assert data["question"] is None
+    assert data["why"] is None
+
+    session = get_session(session_id)
+    assert session["is_complete"] is True
+    assert session["stop_reason"] == "max_questions_reached"
+    assert session["question_count"] == settings.max_clarification_rounds
+
+
+def test_coaching_next_unknown_session_returns_404():
+    response = client.post("/api/coaching/nonexistent-session/next")
+    assert response.status_code == 404
+
+
+def test_coaching_next_pending_question_returns_400(monkeypatch):
+    session_id = _create_session_directly()  # current_question is set, question_count=0
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("Claude must not be called when there is a pending question")
+
+    monkeypatch.setattr("app.coaching.router.generate_clarification_question", _fail_if_called)
+
+    response = client.post(f"/api/coaching/{session_id}/next")
+    assert response.status_code == 400
+    assert "answered" in response.json()["detail"].lower()
+
+
+def test_coaching_next_already_complete_returns_400(monkeypatch):
+    analysis = _make_analysis(rc=2, ac=2, oq=2, sd=2)
+    session_id = _create_next_ready_session(analysis, question_count=1)
+    session = get_session(session_id)
+    session["is_complete"] = True
+    session["stop_reason"] = "readiness_threshold_met"
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("Claude must not be called when the session is already complete")
+
+    monkeypatch.setattr("app.coaching.router.generate_clarification_question", _fail_if_called)
+
+    response = client.post(f"/api/coaching/{session_id}/next")
+    assert response.status_code == 400
+    assert "already complete" in response.json()["detail"].lower()
+
+
+def test_coaching_next_inconsistent_history_returns_400(monkeypatch):
+    analysis = _make_analysis(rc=1, ac=1, oq=0, sd=2)
+    session_id = _create_next_ready_session(analysis, question_count=1)
+    session = get_session(session_id)
+    session["questions_asked"] = ["Question 1", "Question 2"]
+    session["answers"] = ["Answer 1"]
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("Claude must not be called when history is inconsistent")
+
+    monkeypatch.setattr("app.coaching.router.generate_clarification_question", _fail_if_called)
+
+    response = client.post(f"/api/coaching/{session_id}/next")
+    assert response.status_code == 400
+    assert "inconsist" in response.json()["detail"].lower()
+
+    session_after = get_session(session_id)
+    assert session_after["is_complete"] is False
+    assert session_after["questions_asked"] == ["Question 1", "Question 2"]
+    assert session_after["answers"] == ["Answer 1"]
+
+
+def test_coaching_next_passes_previous_questions_to_prompt(monkeypatch):
+    analysis = _make_analysis(rc=1, ac=1, oq=0, sd=2)
+    session_id = _create_next_ready_session(analysis, question_count=1)
+    session = get_session(session_id)
+    session["questions_asked"] = ["What event should trigger the notification?"]
+    session["answers"] = ["When a new message is received."]
+
+    captured: dict = {}
+
+    def _spy_build_user_prompt(ticket, analysis, criterion_key, issues, previous_questions=None):
+        captured["previous_questions"] = previous_questions
+        return "irrelevant prompt text"
+
+    def _fake_generate(system_prompt, user_prompt):
+        return ClarificationQuestionOutput(question="Next question?", why="Next reason.")
+
+    monkeypatch.setattr("app.coaching.router.build_question_user_prompt", _spy_build_user_prompt)
+    monkeypatch.setattr("app.coaching.router.generate_clarification_question", _fake_generate)
+
+    response = client.post(f"/api/coaching/{session_id}/next")
+    assert response.status_code == 200
+    assert captured["previous_questions"] == ["What event should trigger the notification?"]

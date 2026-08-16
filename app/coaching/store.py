@@ -30,6 +30,14 @@ class InconsistentHistoryError(Exception):
     """Raised when questions_asked and answers have mismatched lengths."""
 
 
+class CoachingAlreadyCompleteError(Exception):
+    """Raised when the next coaching step is requested for a completed session."""
+
+
+class PendingQuestionError(Exception):
+    """Raised when the next coaching step is requested while a question is unanswered."""
+
+
 def create_session(
     ticket: TicketInput,
     analysis: AnalysisResult,
@@ -45,6 +53,8 @@ def create_session(
         "question_count": 0,
         "current_question": question,
         "current_why": why,
+        "is_complete": False,
+        "stop_reason": None,
     }
     return session_id
 
@@ -106,4 +116,70 @@ def replace_analysis(session_id: str, analysis: AnalysisResult) -> CoachingSessi
     """Replace a session's analysis in place, leaving all other fields untouched."""
     session = _SESSIONS[session_id]
     session["analysis"] = analysis
+    return session
+
+
+def get_session_for_next(session_id: str) -> CoachingSessionState:
+    """Validate and return a session ready for the Phase 2D /next decision.
+
+    Raises without mutating anything if the session doesn't exist, is
+    already complete, still has an unanswered pending question, has an
+    inconsistent question/answer history, or has no completed Q&A round yet
+    (i.e. re-analysis has not produced a coaching state to decide from).
+    """
+    session = _SESSIONS.get(session_id)
+    if session is None:
+        raise SessionNotFoundError(f"No coaching session found for session_id '{session_id}'.")
+
+    if session["is_complete"]:
+        raise CoachingAlreadyCompleteError(
+            f"Coaching session '{session_id}' is already complete."
+        )
+
+    if session["current_question"] is not None:
+        raise PendingQuestionError(
+            f"The current clarification question for session '{session_id}' must be "
+            "answered before requesting the next coaching step."
+        )
+
+    if len(session["questions_asked"]) != len(session["answers"]):
+        raise InconsistentHistoryError(
+            f"Coaching history is inconsistent for session '{session_id}': "
+            f"{len(session['questions_asked'])} question(s) but {len(session['answers'])} answer(s)."
+        )
+
+    if session["question_count"] == 0 or not session["questions_asked"] or not session["answers"]:
+        raise NoAnsweredQuestionsError(
+            f"Coaching cannot continue for session '{session_id}' because no clarification "
+            "question has been answered and re-analysis has not produced a coaching state yet."
+        )
+
+    return session
+
+
+def mark_coaching_complete(session_id: str, stop_reason: str) -> CoachingSessionState:
+    """Mark a session's coaching conversation complete.
+
+    Leaves questions_asked, answers, and question_count untouched; clears any
+    pending question fields per the Phase 2D stop contract.
+    """
+    session = _SESSIONS[session_id]
+    session["is_complete"] = True
+    session["stop_reason"] = stop_reason
+    session["current_question"] = None
+    session["current_why"] = None
+    return session
+
+
+def set_next_question(session_id: str, question: str, why: str) -> CoachingSessionState:
+    """Store a newly generated clarification question as the session's pending question.
+
+    Does not touch questions_asked, answers, or question_count - those only
+    change once the question is answered (Phase 2B).
+    """
+    session = _SESSIONS[session_id]
+    session["is_complete"] = False
+    session["stop_reason"] = None
+    session["current_question"] = question
+    session["current_why"] = why
     return session

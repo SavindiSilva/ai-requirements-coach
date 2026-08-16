@@ -22,3 +22,7 @@ class CoachingSessionState(TypedDict):
     # when there is no pending question.
     current_question: str | None
     current_why: str | None
+    # Phase 2D: whether the coaching conversation has been decided complete,
+    # and why. False/None while coaching is in progress or continuing.
+    is_complete: bool
+    stop_reason: str | None
