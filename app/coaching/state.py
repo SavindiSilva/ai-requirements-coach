@@ -9,6 +9,7 @@ should be replaced by a DB-backed model instead of a process-local dict.
 from typing import TypedDict
 
 from app.analysis.schemas import AnalysisResult, TicketInput
+from app.coaching.schemas import FinalRequirementContent
 
 
 class CoachingSessionState(TypedDict):
@@ -26,3 +27,6 @@ class CoachingSessionState(TypedDict):
     # and why. False/None while coaching is in progress or continuing.
     is_complete: bool
     stop_reason: str | None
+    # Phase 2E: the generated development-ready requirement. None until
+    # /finalize successfully runs once; cached thereafter (idempotent).
+    final_requirement: FinalRequirementContent | None

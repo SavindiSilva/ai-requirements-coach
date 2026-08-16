@@ -9,6 +9,7 @@ restarts and is not safe across multiple worker processes.
 import uuid
 
 from app.analysis.schemas import AnalysisResult, TicketInput
+from app.coaching.schemas import FinalRequirementContent
 from app.coaching.state import CoachingSessionState
 
 _SESSIONS: dict[str, CoachingSessionState] = {}
@@ -38,6 +39,10 @@ class PendingQuestionError(Exception):
     """Raised when the next coaching step is requested while a question is unanswered."""
 
 
+class CoachingNotCompleteError(Exception):
+    """Raised when finalization is requested before coaching has been marked complete."""
+
+
 def create_session(
     ticket: TicketInput,
     analysis: AnalysisResult,
@@ -55,6 +60,7 @@ def create_session(
         "current_why": why,
         "is_complete": False,
         "stop_reason": None,
+        "final_requirement": None,
     }
     return session_id
 
@@ -182,4 +188,41 @@ def set_next_question(session_id: str, question: str, why: str) -> CoachingSessi
     session["stop_reason"] = None
     session["current_question"] = question
     session["current_why"] = why
+    return session
+
+
+def get_session_for_finalize(session_id: str) -> CoachingSessionState:
+    """Validate and return a session ready for Phase 2E finalization.
+
+    Raises without mutating anything if the session doesn't exist, coaching
+    hasn't been marked complete yet, or its question/answer history is
+    inconsistent (defensive - a completed session should already satisfy
+    this, since mark_coaching_complete is only reachable once
+    get_session_for_next has validated it).
+    """
+    session = _SESSIONS.get(session_id)
+    if session is None:
+        raise SessionNotFoundError(f"No coaching session found for session_id '{session_id}'.")
+
+    if not session["is_complete"]:
+        raise CoachingNotCompleteError(
+            f"Coaching session '{session_id}' is not complete yet. Call /next "
+            "until coaching is marked complete before finalizing."
+        )
+
+    if len(session["questions_asked"]) != len(session["answers"]):
+        raise InconsistentHistoryError(
+            f"Coaching history is inconsistent for session '{session_id}': "
+            f"{len(session['questions_asked'])} question(s) but {len(session['answers'])} answer(s)."
+        )
+
+    return session
+
+
+def store_final_requirement(
+    session_id: str, final_requirement: FinalRequirementContent
+) -> CoachingSessionState:
+    """Store the generated final requirement, leaving all other fields untouched."""
+    session = _SESSIONS[session_id]
+    session["final_requirement"] = final_requirement
     return session

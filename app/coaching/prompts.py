@@ -1,7 +1,11 @@
-"""Prompt templates for the Phase 2A coaching clarification-question step."""
+"""Prompt templates for the coaching workflow.
+
+Phase 2A: the clarification-question step. Phase 2E: the final-requirement
+generation step, once coaching has been marked complete.
+"""
 
 from app.analysis.schemas import AnalysisResult, TicketInput
-from app.coaching.selection import CRITERION_LABELS
+from app.coaching.selection import CRITERION_LABELS, CRITERION_PRIORITY
 
 _SYSTEM_PROMPT = """You are an AI requirements coach for software teams. You have \
 already analysed a ticket against a four-criterion Definition-of-Ready rubric \
@@ -60,4 +64,94 @@ def build_question_user_prompt(
         "Call the submit_clarification_question tool with ONE focused question "
         "and a short why explanation targeting the most important unresolved "
         "issue above."
+    )
+
+
+_FINALIZE_SYSTEM_PROMPT = """You are an AI requirements coach for software teams. A coaching \
+conversation has just concluded for a ticket you previously analysed against \
+a four-criterion Definition-of-Ready rubric (Requirement Clarity, Acceptance \
+Criteria, Open Questions, Scope Definition). Your job now is to synthesise \
+the original ticket plus everything learned during coaching into a single \
+development-ready requirement.
+
+Genuinely incorporate the clarification answers - do not simply paraphrase \
+the original ticket text. For example, if the original ticket said "add \
+notifications when something happens" and coaching resolved the trigger \
+event to "a new message is received", the final requirement must state that \
+resolved trigger explicitly, not the original vague phrase.
+
+Do not invent information that was not stated in the ticket, the analysis \
+findings, or the coaching answers.
+
+Produce exactly these fields by calling the submit_final_requirement tool:
+
+- user_story: one clear sentence naming who wants what and why.
+- acceptance_criteria: specific, measurable, testable conditions. Prefer \
+Given/When/Then phrasing where it fits naturally.
+- scope: what is included, informed by the scope findings below. Do not \
+reintroduce scope problems the analysis already flagged.
+- assumptions: only assumptions that remain relevant after coaching - if a \
+coaching answer already resolved an assumption, do not repeat it here.
+- dependencies: only dependencies carried over from the analysis findings \
+below. Never invent a new dependency. These were never confirmed by Jira \
+data, so phrase each one as inferred/possible (e.g. "Likely depends on ..."), \
+never as a confirmed fact.
+
+You must respond only by calling the submit_final_requirement tool with the \
+complete structured requirement. Do not respond in plain text.
+"""
+
+
+def build_finalize_system_prompt() -> str:
+    return _FINALIZE_SYSTEM_PROMPT
+
+
+def build_finalize_user_prompt(
+    ticket: TicketInput,
+    analysis: AnalysisResult,
+    coaching_history: list[tuple[str, str]],
+    stop_reason: str | None,
+) -> str:
+    scores_text = "\n".join(
+        f"- {CRITERION_LABELS[key]}: {getattr(analysis, key).score}/3 "
+        f"(evidence: {getattr(analysis, key).evidence})"
+        for key in CRITERION_PRIORITY
+    )
+
+    history_text = "\n\n".join(
+        f"Question: {question}\nAnswer: {answer}" for question, answer in coaching_history
+    ) or "(no coaching questions were asked)"
+
+    def _list_or_none(items: list[str]) -> str:
+        return "\n".join(f"- {item}" for item in items) or "- (none)"
+
+    if stop_reason == "max_questions_reached":
+        stop_reason_text = (
+            "Coaching status: the maximum number of clarification questions was "
+            "reached before every criterion met the readiness bar. Some areas may "
+            "still be unresolved. Produce your best current draft, but do not "
+            "represent any unresolved area as a confirmed, settled fact - keep "
+            "assumptions and scope honest about what is still actually known."
+        )
+    else:
+        stop_reason_text = (
+            "Coaching status: all four readiness criteria met the readiness bar. "
+            "Generate the final requirement normally."
+        )
+
+    return (
+        "Ticket:\n"
+        f"Title: {ticket.title}\n\n"
+        f"Description:\n{ticket.description}\n\n"
+        f"Latest readiness scores:\n{scores_text}\n\n"
+        f"Missing-information findings:\n{_list_or_none(analysis.what_is_missing)}\n\n"
+        f"Missing acceptance-criteria findings:\n{_list_or_none(analysis.missing_acceptance_criteria)}\n\n"
+        f"Scope findings:\n{_list_or_none(analysis.scope_problems)}\n\n"
+        f"Possible dependencies (never confirmed - only Jira could confirm these):\n"
+        f"{_list_or_none(analysis.possible_dependencies)}\n\n"
+        f"Remaining assumptions:\n{_list_or_none(analysis.assumptions)}\n\n"
+        f"Coaching question/answer history:\n{history_text}\n\n"
+        f"{stop_reason_text}\n\n"
+        "Call the submit_final_requirement tool with the complete structured "
+        "development-ready requirement."
     )

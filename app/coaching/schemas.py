@@ -66,3 +66,21 @@ class CoachingNextResponse(BaseModel):
     why: str | None
     question_count: int
     current_scores: CurrentScores
+
+
+class FinalRequirementContent(BaseModel):
+    user_story: str = Field(..., min_length=1)
+    acceptance_criteria: list[str] = Field(default_factory=list)
+    scope: list[str] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
+    dependencies: list[str] = Field(default_factory=list)
+
+
+class FinalizeResponse(BaseModel):
+    session_id: str
+    is_complete: bool
+    stop_reason: str | None
+    final_requirement: FinalRequirementContent
+    remaining_gaps: list[str]
+    current_scores: CurrentScores
+    question_count: int

@@ -15,7 +15,7 @@ start -> message flow, as required by the Phase 2B spec.
 
 from app.agent.llm import LLMAnalysisError
 from app.analysis.schemas import AnalysisResult, CriterionScore, TicketInput
-from app.coaching.schemas import ClarificationQuestionOutput
+from app.coaching.schemas import ClarificationQuestionOutput, FinalRequirementContent
 from app.coaching.selection import select_weakest_criterion
 from app.coaching.store import create_session, get_session, record_answer
 from app.core.config import settings
@@ -492,3 +492,221 @@ def test_coaching_next_passes_previous_questions_to_prompt(monkeypatch):
     response = client.post(f"/api/coaching/{session_id}/next")
     assert response.status_code == 200
     assert captured["previous_questions"] == ["What event should trigger the notification?"]
+
+
+# --- Phase 2E: generate the final development-ready requirement ---
+#
+# generate_final_requirement is the only Claude call in this step; every
+# test below monkeypatches app.coaching.router.generate_final_requirement
+# so no real API call happens except in a manual verification pass.
+
+
+def _create_completed_session(
+    analysis: AnalysisResult,
+    stop_reason: str,
+    question_count: int = 1,
+) -> str:
+    """Build a session in the state POST /finalize expects: coaching marked
+    complete with the given analysis and stop_reason."""
+    session_id = _create_next_ready_session(analysis, question_count=question_count)
+    session = get_session(session_id)
+    session["is_complete"] = True
+    session["stop_reason"] = stop_reason
+    session["current_question"] = None
+    session["current_why"] = None
+    return session_id
+
+
+_SAMPLE_FINAL_REQUIREMENT = FinalRequirementContent(
+    user_story="As a message recipient, I want to be notified when I receive a new message so I can respond promptly.",
+    acceptance_criteria=[
+        "Given User A sends a message to User B, when the message is sent, then User B receives a notification.",
+        "Given User A sends a message to User B, when the message is sent, then User A does not receive a notification.",
+    ],
+    scope=["Notification triggered only by new-message receipt."],
+    assumptions=["An existing messaging feature already generates 'new message' events."],
+    dependencies=["Likely depends on the existing messaging feature that generates message-received events."],
+)
+
+
+def test_coaching_finalize_readiness_threshold_met(monkeypatch):
+    analysis = _make_analysis(rc=2, ac=2, oq=2, sd=2)  # all >= threshold 2
+    session_id = _create_completed_session(analysis, "readiness_threshold_met", question_count=1)
+    original_session = get_session(session_id)
+    original_questions_asked = list(original_session["questions_asked"])
+    original_answers = list(original_session["answers"])
+
+    call_count = {"n": 0}
+
+    def _fake_generate(system_prompt, user_prompt):
+        call_count["n"] += 1
+        return _SAMPLE_FINAL_REQUIREMENT
+
+    monkeypatch.setattr("app.coaching.router.generate_final_requirement", _fake_generate)
+
+    response = client.post(f"/api/coaching/{session_id}/finalize")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["session_id"] == session_id
+    assert data["is_complete"] is True
+    assert data["stop_reason"] == "readiness_threshold_met"
+    assert data["remaining_gaps"] == []
+    assert data["final_requirement"]["user_story"] == _SAMPLE_FINAL_REQUIREMENT.user_story
+    assert data["final_requirement"]["acceptance_criteria"] == _SAMPLE_FINAL_REQUIREMENT.acceptance_criteria
+    assert call_count["n"] == 1
+
+    session = get_session(session_id)
+    assert session["final_requirement"] == _SAMPLE_FINAL_REQUIREMENT
+    assert session["questions_asked"] == original_questions_asked
+    assert session["answers"] == original_answers
+    assert session["question_count"] == 1
+    assert session["analysis"] is analysis
+
+
+def test_coaching_finalize_max_questions_reached_with_remaining_gaps(monkeypatch):
+    # rc=2, ac=0, oq=2, sd=1 with threshold=2 -> gaps in Acceptance Criteria
+    # and Scope Definition, matching the worked example from the spec.
+    analysis = _make_analysis(rc=2, ac=0, oq=2, sd=1)
+    session_id = _create_completed_session(analysis, "max_questions_reached", question_count=5)
+
+    def _fake_generate(system_prompt, user_prompt):
+        return _SAMPLE_FINAL_REQUIREMENT
+
+    monkeypatch.setattr("app.coaching.router.generate_final_requirement", _fake_generate)
+
+    response = client.post(f"/api/coaching/{session_id}/finalize")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["stop_reason"] == "max_questions_reached"
+    assert data["remaining_gaps"] == ["Acceptance Criteria", "Scope Definition"]
+    assert data["final_requirement"]["user_story"]
+
+
+def test_coaching_finalize_unknown_session_returns_404(monkeypatch):
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("Claude must not be called for an unknown session")
+
+    monkeypatch.setattr("app.coaching.router.generate_final_requirement", _fail_if_called)
+
+    response = client.post("/api/coaching/nonexistent-session/finalize")
+    assert response.status_code == 404
+
+
+def test_coaching_finalize_coaching_not_complete_returns_400(monkeypatch):
+    analysis = _make_analysis(rc=1, ac=1, oq=0, sd=2)
+    session_id = _create_next_ready_session(analysis, question_count=1)  # is_complete stays False
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("Claude must not be called when coaching is not complete")
+
+    monkeypatch.setattr("app.coaching.router.generate_final_requirement", _fail_if_called)
+
+    response = client.post(f"/api/coaching/{session_id}/finalize")
+    assert response.status_code == 400
+    assert "not complete" in response.json()["detail"].lower()
+
+
+def test_coaching_finalize_inconsistent_history_returns_400(monkeypatch):
+    analysis = _make_analysis(rc=2, ac=2, oq=2, sd=2)
+    session_id = _create_completed_session(analysis, "readiness_threshold_met", question_count=1)
+    session = get_session(session_id)
+    session["questions_asked"] = ["Question 1", "Question 2"]
+    session["answers"] = ["Answer 1"]
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("Claude must not be called when history is inconsistent")
+
+    monkeypatch.setattr("app.coaching.router.generate_final_requirement", _fail_if_called)
+
+    response = client.post(f"/api/coaching/{session_id}/finalize")
+    assert response.status_code == 400
+    assert "inconsist" in response.json()["detail"].lower()
+
+    session_after = get_session(session_id)
+    assert session_after["final_requirement"] is None
+
+
+def test_coaching_finalize_returns_cached_result_without_calling_claude(monkeypatch):
+    analysis = _make_analysis(rc=2, ac=2, oq=2, sd=2)
+    session_id = _create_completed_session(analysis, "readiness_threshold_met", question_count=1)
+    session = get_session(session_id)
+    session["final_requirement"] = _SAMPLE_FINAL_REQUIREMENT
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("Claude must not be called when a final requirement already exists")
+
+    monkeypatch.setattr("app.coaching.router.generate_final_requirement", _fail_if_called)
+
+    response = client.post(f"/api/coaching/{session_id}/finalize")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["final_requirement"]["user_story"] == _SAMPLE_FINAL_REQUIREMENT.user_story
+    assert data["final_requirement"]["dependencies"] == _SAMPLE_FINAL_REQUIREMENT.dependencies
+
+
+def test_coaching_finalize_prompt_receives_complete_context(monkeypatch):
+    analysis = _make_analysis(rc=2, ac=0, oq=2, sd=1)
+    session_id = _create_completed_session(analysis, "max_questions_reached", question_count=1)
+    session = get_session(session_id)
+    session["questions_asked"] = ["What event should trigger the notification?"]
+    session["answers"] = ["When a new message is received."]
+
+    captured: dict = {}
+
+    def _spy_build_user_prompt(ticket, analysis, coaching_history, stop_reason):
+        captured["ticket"] = ticket
+        captured["analysis"] = analysis
+        captured["coaching_history"] = coaching_history
+        captured["stop_reason"] = stop_reason
+        return "irrelevant prompt text"
+
+    def _fake_generate(system_prompt, user_prompt):
+        return _SAMPLE_FINAL_REQUIREMENT
+
+    monkeypatch.setattr("app.coaching.router.build_finalize_user_prompt", _spy_build_user_prompt)
+    monkeypatch.setattr("app.coaching.router.generate_final_requirement", _fake_generate)
+
+    response = client.post(f"/api/coaching/{session_id}/finalize")
+    assert response.status_code == 200
+
+    assert captured["ticket"] == session["ticket"]
+    assert captured["analysis"] is analysis
+    assert captured["coaching_history"] == [
+        ("What event should trigger the notification?", "When a new message is received.")
+    ]
+    assert captured["stop_reason"] == "max_questions_reached"
+
+
+def test_coaching_finalize_structured_output_matches_schema(monkeypatch):
+    analysis = _make_analysis(rc=2, ac=2, oq=2, sd=2)
+    session_id = _create_completed_session(analysis, "readiness_threshold_met", question_count=1)
+
+    mocked_output = FinalRequirementContent(
+        user_story="As a recipient, I want a notification when a new message arrives so I notice it promptly.",
+        acceptance_criteria=["Given a new message is sent, when it arrives, then the recipient is notified."],
+        scope=["New-message notifications only."],
+        assumptions=[],
+        dependencies=[],
+    )
+
+    def _fake_generate(system_prompt, user_prompt):
+        return mocked_output
+
+    monkeypatch.setattr("app.coaching.router.generate_final_requirement", _fake_generate)
+
+    response = client.post(f"/api/coaching/{session_id}/finalize")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["final_requirement"] == {
+        "user_story": mocked_output.user_story,
+        "acceptance_criteria": mocked_output.acceptance_criteria,
+        "scope": mocked_output.scope,
+        "assumptions": mocked_output.assumptions,
+        "dependencies": mocked_output.dependencies,
+    }
+    session = get_session(session_id)
+    assert session["final_requirement"] == mocked_output
