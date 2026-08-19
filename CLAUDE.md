@@ -158,34 +158,48 @@ Do NOT create microservices.
 
 # 6. Backend Structure
 
-Use a structure similar to:
+The current backend uses the following modular monolith structure:
 
 ai-requirements-coach/
 ├── app/
 │   ├── main.py
-│   ├── config.py
-│   │
-│   ├── api/
-│   │   └── routes/
-│   │
-│   ├── models/
-│   ├── schemas/
-│   ├── services/
 │   ├── agent/
+│   ├── analysis/
+│   ├── auth/
+│   ├── coaching/
+│   ├── core/
+│   ├── database/
 │   ├── jira/
 │   ├── rag/
-│   └── db/
+│   └── tickets/
 │
 ├── tests/
 ├── .env
+├── .env.example
 ├── .gitignore
+├── CLAUDE.md
+├── README.md
 └── requirements.txt
+
+Responsibilities:
+
+- `agent/` → LangGraph workflow and LLM orchestration
+- `analysis/` → requirement analysis schemas and API routes
+- `coaching/` → clarification conversation logic, state, selection, stop conditions, and API routes
+- `auth/` → authentication-related functionality
+- `core/` → configuration and shared application settings
+- `database/` → database access and persistence
+- `jira/` → Jira OAuth and Jira REST API integration
+- `rag/` → document ingestion, embeddings, retrieval, and ChromaDB
+- `tickets/` → ticket-related models and services
 
 Keep responsibilities separated.
 
+Do not create duplicate modules for functionality that already exists.
+
 Routes should handle HTTP requests.
 
-Services should contain application logic.
+Application logic should remain inside the appropriate module.
 
 Agents should contain LangGraph/LLM orchestration.
 
@@ -199,34 +213,75 @@ Database modules should contain database operations.
 
 # 7. Development Strategy
 
-Build in this order.
+Development is incremental. Do not rewrite completed phases.
 
-## Phase 1: Core AI Agent
+## Completed
 
-First build the AI agent using MOCK ticket data.
+### Phase 1: Core AI Analysis
 
-Do NOT start by integrating Jira.
+Completed:
 
-The initial input should be plain structured ticket data.
+- Mock ticket input
+- Claude integration
+- Structured output using forced tool use
+- Four readiness criteria
+- Overall readiness calculation in Python
+- Gap identification
+- Clarification question generation
+- LangGraph single-node analysis workflow
+- API endpoint: POST /api/analyse
 
-Example:
+### Phase 2: Coaching Foundation
 
-{
-  "title": "Add notification feature",
-  "description": "Users should receive notifications when something happens."
-}
+Completed:
 
-The agent should return structured analysis.
+- Coaching state
+- Coaching session API
+- Clarification question selection
+- User answer handling
+- Re-analysis using accumulated clarification history
+- Coaching stop-condition logic
+- Maximum clarification rounds
+- Coaching tests
 
-The first working milestone is:
+### Phase 3: RAG Foundation (standalone module)
 
-Ticket
-→ Analysis
-→ Score
-→ Gaps
-→ Questions
+Completed:
 
-Only after this works reliably should Jira integration be added.
+- Standalone `app/rag/` module: schemas, chunking, embeddings, ChromaDB-backed store
+- Project-scoped document ingestion (chunk, embed, store) via `app/rag/store.py::add_document`
+- Project-scoped semantic retrieval via `app/rag/store.py::retrieve`, with `project_id` always enforced as a metadata filter so one project's chunks can never be returned for another
+- Typed errors: `EmbeddingError` (embedding failures), `RAGStoreError` (ChromaDB read/write failures)
+- RAG tests: chunking, ingestion, retrieval, project_id isolation, metadata preservation, invalid input, embedding failure
+
+Not yet done, by design (see docs/architecture.md):
+
+- No API router for RAG
+- Not wired into the analysis/coaching prompts
+- No `project_id` on `TicketInput` or coaching session state yet
+
+## Current Priority
+
+The core AI analysis, coaching foundation, and standalone RAG foundation are implemented.
+
+The immediate product priority is frontend integration.
+
+The frontend should consume the real backend APIs instead of mock analysis/coaching data.
+
+Do not begin RAG prompt integration until the frontend/Jira workflow provides the project context required for project-scoped retrieval.
+
+Do not rebuild the existing AI analysis, coaching, or standalone RAG functionality unless a concrete bug or missing requirement is identified.
+
+## Remaining Implementation Order
+
+1. Frontend integration
+2. Jira integration
+3. RAG prompt integration (the standalone RAG module itself is already implemented - see Phase 3 above)
+4. User-approved Jira update
+5. End-to-end testing
+6. Deployment
+
+The exact order may be adjusted when required by integration dependencies, but scope must remain MVP-focused.
 
 ---
 
@@ -619,21 +674,24 @@ Project-specific knowledge must not be retrieved for another project.
 
 # 20. RAG Implementation Strategy
 
-Do NOT build RAG before the core AI agent works.
+RAG must not block the core product workflow.
 
-Order:
+The implementation priority is:
 
-1. Mock ticket
-2. AI analysis
-3. Scoring
-4. Coaching
-5. Improved ticket
-6. Jira integration
-7. RAG
-8. Frontend integration
-9. Deployment
+1. Core AI analysis
+2. Coaching loop
+3. Frontend integration
+4. Jira integration
+5. RAG
+6. User-approved Jira update
+7. End-to-end testing
+8. Deployment
 
-RAG is not required for the first working agent.
+RAG should be implemented only after the core Jira-to-coaching workflow is functional.
+
+For the MVP, RAG should remain project-scoped and minimal.
+
+Do not introduce RAG into the analysis pipeline until the retrieval quality and metadata filtering can be tested reliably.
 
 ---
 
@@ -803,27 +861,25 @@ When uncertain about a technical decision, prefer the simpler implementation tha
 
 # 28. Current Implementation Priority
 
-The current priority is the backend AI agent.
+The core backend AI analysis, coaching foundation, and standalone RAG
+foundation are implemented.
 
-Build this first:
+The immediate product priority is integrating the real backend with the
+frontend.
 
-MOCK TICKET
+Current workflow:
+
+FRONTEND
  ↓
-LANGGRAPH
+FastAPI API
  ↓
-CLAUDE
+AI ANALYSIS
  ↓
-STRUCTURED ANALYSIS
- ↓
-4 CRITERIA SCORES
+READINESS SCORE
  ↓
 GAPS
  ↓
-CLARIFICATION QUESTIONS
-
-After that:
-
-COACHING STATE
+COACHING
  ↓
 USER ANSWER
  ↓
@@ -831,27 +887,37 @@ RE-EVALUATION
  ↓
 IMPROVED REQUIREMENT
 
-Then integrate Jira.
+The next implementation stages are:
 
-Then implement RAG.
+1. Frontend integration with existing analysis/coaching APIs
+2. Jira OAuth and Jira project/ticket retrieval
+3. Connect Jira tickets and project context to the existing analysis workflow
+4. Wire the standalone RAG module into analysis/coaching using project-scoped retrieval
+5. Improved requirement review and explicit approval
+6. User-approved Jira update
+7. End-to-end testing
+8. Deployment
 
-Then connect the React frontend.
+Important dependency:
 
-Then deploy.
+RAG prompt integration should not begin until a reliable project_id is
+available from the frontend/Jira workflow. Do not invent or hardcode project
+identifiers to force RAG integration.
+
+Do not rebuild completed backend functionality unless required to support
+an integration.
 
 ---
 
 # 29. Important Rule
 
-Do not assume that prototype functionality is real backend functionality.
-
-The current UI prototype uses mock data.
-
 The real implementation must replace mock behaviour with actual backend APIs gradually.
+
+During integration phases, test each boundary between frontend and backend before moving to the next feature.
 
 Do not modify the UI just because a backend feature is not implemented yet.
 
-Build and test the backend independently first.
+Do not rebuild working backend functionality when an existing API already provides the required capability.
 
 ---
 
@@ -867,6 +933,41 @@ Before implementing a new feature:
 6. Add tests for core functionality.
 7. Run the relevant tests after changes.
 8. Do not introduce unrelated features.
+
+When integrating existing modules:
+
+1. Inspect the existing implementation first.
+2. Reuse existing schemas, endpoints, and services.
+3. Do not create duplicate functionality.
+4. Preserve existing tests and behaviour.
+5. Add integration tests where appropriate.
+6. If an existing API does not provide information required by the frontend, extend it minimally rather than creating a parallel implementation.
+
+# 31. Documentation Maintenance
+
+The following documentation files must remain synchronized with the implementation:
+
+- `CLAUDE.md` → project rules, scope, priorities, and development instructions
+- `docs/architecture.md` → current implemented architecture and system/data flows
+- `docs/skills.md` → reusable technical patterns, implementation conventions, and integration knowledge
+
+When implementing a feature that changes architecture, update `docs/architecture.md`.
+
+When implementing a new technical pattern, integration, library usage, or reusable implementation convention, update `docs/skills.md`.
+
+When implementation progress changes the current project phase, priorities, constraints, or development rules, update `CLAUDE.md`.
+
+Documentation updates must:
+
+1. Reflect the actual implemented code.
+2. Never document planned functionality as if it already exists.
+3. Avoid unnecessary duplication between the three files.
+4. Keep documentation concise and maintainable.
+5. Be included in the same change as the implementation that caused the documentation to become outdated.
+
+Before completing a feature, check whether any of these documentation files need updating.
+
+If documentation changes are required, make them as part of the same implementation task and report them in the final summary.
 
 If a requirement is ambiguous, choose the simplest MVP-compatible interpretation and state the assumption.
 
