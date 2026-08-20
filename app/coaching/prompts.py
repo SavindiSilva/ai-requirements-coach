@@ -4,8 +4,10 @@ Phase 2A: the clarification-question step. Phase 2E: the final-requirement
 generation step, once coaching has been marked complete.
 """
 
+from app.agent.rag_integration import format_context_for_prompt
 from app.analysis.schemas import AnalysisResult, TicketInput
 from app.coaching.selection import CRITERION_LABELS, CRITERION_PRIORITY
+from app.rag.schemas import RetrievedChunk
 
 _SYSTEM_PROMPT = """You are an AI requirements coach for software teams. You have \
 already analysed a ticket against a four-criterion Definition-of-Ready rubric \
@@ -111,6 +113,7 @@ def build_finalize_user_prompt(
     analysis: AnalysisResult,
     coaching_history: list[tuple[str, str]],
     stop_reason: str | None,
+    retrieved_context: list[RetrievedChunk] | None = None,
 ) -> str:
     scores_text = "\n".join(
         f"- {CRITERION_LABELS[key]}: {getattr(analysis, key).score}/3 "
@@ -139,6 +142,9 @@ def build_finalize_user_prompt(
             "Generate the final requirement normally."
         )
 
+    context_text = format_context_for_prompt(retrieved_context or [])
+    context_block = f"{context_text}\n\n" if context_text else ""
+
     return (
         "Ticket:\n"
         f"Title: {ticket.title}\n\n"
@@ -152,6 +158,7 @@ def build_finalize_user_prompt(
         f"Remaining assumptions:\n{_list_or_none(analysis.assumptions)}\n\n"
         f"Coaching question/answer history:\n{history_text}\n\n"
         f"{stop_reason_text}\n\n"
+        f"{context_block}"
         "Call the submit_final_requirement tool with the complete structured "
         "development-ready requirement."
     )

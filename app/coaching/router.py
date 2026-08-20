@@ -28,6 +28,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.agent.graph import analyze_ticket
 from app.agent.llm import LLMAnalysisError
+from app.agent.rag_integration import get_retrieved_context
 from app.analysis.schemas import TicketInput
 from app.coaching.llm import (
     CoachingLLMError,
@@ -247,9 +248,13 @@ def finalize_coaching_session(session_id: str) -> FinalizeResponse:
     if session["final_requirement"] is None:
         coaching_history = list(zip(session["questions_asked"], session["answers"]))
 
+        ticket = session["ticket"]
+        query_text = f"{ticket.title}\n{ticket.description}"
+        retrieved_context = get_retrieved_context(query_text)
+
         system_prompt = build_finalize_system_prompt()
         user_prompt = build_finalize_user_prompt(
-            session["ticket"], analysis, coaching_history, session["stop_reason"]
+            ticket, analysis, coaching_history, session["stop_reason"], retrieved_context
         )
 
         try:

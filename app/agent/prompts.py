@@ -1,7 +1,9 @@
 """Prompt templates for the Phase 1 requirement-analysis agent."""
 
+from app.agent.rag_integration import format_context_for_prompt
 from app.analysis.schemas import TicketInput
 from app.core.config import settings
+from app.rag.schemas import RetrievedChunk
 
 _SYSTEM_PROMPT_TEMPLATE = """You are an AI requirements coach for software teams. You evaluate a \
 single software ticket (title + description) against a Definition-of-Ready \
@@ -61,6 +63,7 @@ def build_system_prompt() -> str:
 def build_user_prompt(
     ticket: TicketInput,
     coaching_history: list[tuple[str, str]] | None = None,
+    retrieved_context: list[RetrievedChunk] | None = None,
 ) -> str:
     prompt = (
         "Analyze this ticket:\n\n"
@@ -73,6 +76,10 @@ def build_user_prompt(
             f"Question: {question}\nAnswer: {answer}" for question, answer in coaching_history
         )
         prompt += f"Previous clarification:\n\n{history_text}\n\n"
+
+    context_text = format_context_for_prompt(retrieved_context or [])
+    if context_text:
+        prompt += f"{context_text}\n\n"
 
     prompt += "Call the submit_requirement_analysis tool with your full structured analysis."
     return prompt

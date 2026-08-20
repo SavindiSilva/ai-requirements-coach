@@ -21,15 +21,16 @@ HTTP client (tests / curl / future frontend)
  │ analysis     │  coaching    │   ← APIRouters
  └──────┬───────┴──────┬───────┘
         ↓              ↓
-   app/agent/graph.py (LangGraph, single-node)
+   app/agent/graph.py (LangGraph, two-node:
+                        retrieve_context → analyze_requirement)
+        ↓                    ↓
+        │              app/agent/rag_integration.py (fail-safe wrapper)
+        │                    ↓
+        │              app/rag/store.py::retrieve()
+        │                    ↓
+        │              chunking.py / embeddings.py (OpenAI API) / ChromaDB
         ↓
    app/agent/llm.py → Anthropic Claude API
-
-
-   app/rag/  (standalone, not called by anything above yet)
-        ↓
-   chunking.py → embeddings.py → Anthropic-independent
-                 (OpenAI API)     ChromaDB (local, persistent)
 ```
 
 Coaching state is held in a process-local Python dict
@@ -37,10 +38,13 @@ Coaching state is held in a process-local Python dict
 shared across worker processes. There is no database connection anywhere in
 the codebase.
 
-`app/rag/` is a separate, self-contained subsystem: it has its own external
-dependency (OpenAI embeddings) and its own persistent store (ChromaDB on
-disk), but nothing in `analysis/`, `coaching/`, or `agent/` calls into it
-yet, and it exposes no HTTP endpoint. See §11.
+`app/rag/` itself remains a separate, self-contained subsystem (its own
+external dependency on OpenAI embeddings, its own persistent ChromaDB
+store, no HTTP endpoint of its own — unchanged from Phase 3's first pass).
+As of this Phase 3 continuation, `app/agent/graph.py` and
+`app/coaching/router.py` now call into it — through
+`app/agent/rag_integration.py`, not directly — using a temporary hardcoded
+`project_id="default"` evaluation scope. See §11.
 
 ## 2. Current backend module structure
 
@@ -48,25 +52,26 @@ yet, and it exposes no HTTP endpoint. See §11.
 app/
 ├── main.py            FastAPI app, CORS, router wiring, /health
 ├── agent/              LangGraph orchestration + Claude client (shared)
-│   ├── graph.py         single-node analysis graph
-│   ├── llm.py            Anthropic client wrapper, forced tool-use
-│   ├── prompts.py        analysis system/user prompt templates
-│   └── state.py          AgentState TypedDict
+│   ├── graph.py           two-node graph: retrieve_context → analyze_requirement
+│   ├── llm.py             Anthropic client wrapper, forced tool-use
+│   ├── prompts.py         analysis system/user prompt templates
+│   ├── state.py           AgentState TypedDict
+│   └── rag_integration.py Phase 3: fail-safe retrieval wrapper + temporary project_id="default"
 ├── analysis/           Phase 1: requirement analysis
 │   ├── router.py         POST /api/analyse
 │   └── schemas.py        TicketInput, AnalysisContent, AnalysisResult, ...
 ├── coaching/            Phase 2: multi-turn clarification loop
-│   ├── router.py         /api/coaching/* endpoints
+│   ├── router.py         /api/coaching/* endpoints (finalize now retrieves RAG context)
 │   ├── schemas.py         request/response models
 │   ├── state.py           CoachingSessionState TypedDict
 │   ├── store.py           in-memory session store (dict), validation errors
 │   ├── selection.py       deterministic weakest-criterion selection
 │   ├── stop_condition.py  deterministic stop-condition + remaining-gaps logic
 │   ├── llm.py             Claude wrappers for question/finalize generation
-│   └── prompts.py         coaching prompt templates
+│   └── prompts.py         coaching prompt templates (finalize prompt now context-aware)
 ├── core/
 │   └── config.py         pydantic-settings Settings (env-driven)
-├── rag/                 Phase 3: standalone project-scoped RAG module
+├── rag/                 Phase 3: standalone project-scoped RAG module (unchanged this pass)
 │   ├── schemas.py         DocumentType, DocumentInput, ChunkMetadata, IngestResult, RetrievedChunk
 │   ├── chunking.py         pure word-based chunk_text()
 │   ├── embeddings.py       OpenAI embedding client wrapper, EmbeddingError
@@ -77,16 +82,23 @@ app/
 └── tickets/             empty (__init__.py only) — not started
 
 tests/
-├── test_analysis.py     Phase 1 endpoint tests (real Claude API, no mocks)
-├── test_coaching.py     Phase 2 endpoint + pure-logic tests
-└── test_rag.py           Phase 3 RAG tests (real OpenAI embeddings where needed, no mocks)
+├── test_analysis.py       Phase 1 endpoint tests (real Claude API, no mocks) — unchanged
+├── test_coaching.py       Phase 2 endpoint + pure-logic tests — unchanged
+├── test_rag.py             Phase 3 standalone RAG tests — unchanged
+└── test_rag_integration.py Phase 3 prompt-integration tests: deterministic prompt-construction
+                             and fail-safe-retrieval tests, plus one real-Claude-call regression test
+
+scripts/
+└── rag_eval.py           manual, non-CI with-RAG vs. without-RAG comparison (not part of pytest)
 ```
 
 `auth/`, `database/`, `jira/`, and `tickets/` exist only as empty package
 stubs (`__init__.py` with zero content). No code has been written in any of
-them. `rag/` is implemented as a standalone module (see §11) but is not
-called from anywhere else in the codebase yet - `analysis/` and `coaching/`
-are unchanged.
+them. `rag/` itself (chunking/embeddings/store/schemas) was not modified in
+this pass — the integration lives entirely in the new
+`app/agent/rag_integration.py`, plus small additive changes to
+`app/agent/graph.py`, `app/agent/prompts.py`, `app/coaching/prompts.py`,
+and `app/coaching/router.py` (see §3, §4, §11).
 
 ## 3. Analysis flow (Phase 1)
 
@@ -97,9 +109,18 @@ TicketInput {title, description}
         ↓
 analyze_ticket()                       app/agent/graph.py
         ↓
-LangGraph: START → analyze_requirement_node → END
+LangGraph: START → retrieve_context_node → analyze_requirement_node → END
         ↓
-build_system_prompt() + build_user_prompt()   app/agent/prompts.py
+retrieve_context_node:
+  get_retrieved_context(f"{title}\n{description}")   app/agent/rag_integration.py
+  — [] immediately if OPENAI_API_KEY unset; [] if retrieve() raises
+    EmbeddingError/RAGStoreError/ValueError; never raises itself
+  → state["retrieved_context"]
+        ↓
+build_system_prompt() + build_user_prompt(ticket, coaching_history,
+                                            retrieved_context)   app/agent/prompts.py
+  — appends a "Relevant project context" section only if retrieved_context
+    is non-empty; identical output to pre-Phase-3 otherwise
         ↓
 run_structured_analysis()               app/agent/llm.py
         ↓
@@ -119,7 +140,11 @@ AnalysisResult returned to caller
 list[tuple[str, str]]`, which — when present — is appended to the user
 prompt as a "Previous clarification" section. This is what the coaching
 re-analysis step (§4) reuses; the analysis code itself is unchanged whether
-or not coaching history is supplied.
+or not coaching history is supplied. `analyze_ticket()`'s own signature did
+**not** change for Phase 3 RAG integration — it still takes only `ticket`
+and `coaching_history`; the temporary `project_id="default"` is resolved
+internally inside `retrieve_context_node`, so `app/analysis/router.py` and
+every coaching call site needed zero changes to pick up retrieval.
 
 ## 4. Coaching flow (Phase 2)
 
@@ -157,10 +182,22 @@ POST /api/coaching/{id}/next
 POST /api/coaching/{id}/finalize
     → requires session["is_complete"] == True
     → compute_remaining_gaps()          deterministic, no LLM
-    → generate_final_requirement()      Claude call, forced tool-use
+    → get_retrieved_context(f"{ticket.title}\n{ticket.description}")
+                                          app/agent/rag_integration.py, same fail-safe wrapper
+                                          as the analysis flow — fresh retrieval at finalize
+                                          time, not reused from /start
+    → generate_final_requirement()      Claude call, forced tool-use, prompt now includes
+                                          a "Relevant project context" section if any chunks
+                                          were retrieved
                                           (idempotent — cached on session after first call)
     ← {final_requirement, remaining_gaps, current_scores, ...}
 ```
+
+`/start`, `/reanalyze`, and `/next` all pick up retrieval "for free" because
+they call `analyze_ticket()`, which now runs the two-node graph described
+in §3. `/finalize` is the one coaching step that never went through
+`analyze_ticket()`, so it has its own direct `get_retrieved_context()` call
+right before building its prompt.
 
 Notes on what is **not** implemented in this flow:
 - No user-approval endpoint (`POST /api/requirements/{id}/approve` from
@@ -173,20 +210,27 @@ Notes on what is **not** implemented in this flow:
 
 ## 5. LangGraph usage
 
-Only one graph exists, and it is intentionally minimal:
+One graph exists, now with two nodes:
 
 ```python
 # app/agent/graph.py
-START → analyze_requirement_node → END
+START → retrieve_context_node → analyze_requirement_node → END
 ```
 
-A single-node graph. There is no multi-node coaching graph — the "wait for
-user / re-evaluate / more gaps?" loop described conceptually in CLAUDE.md
-§11 is implemented as plain FastAPI request/response endpoints in
+`retrieve_context_node` was added in this Phase 3 pass specifically
+because retrieval-then-analyze is a genuine internal, in-process
+transition (not a separate HTTP round-trip) — exactly the case where
+expanding the graph is the right call, per the rule in `docs/skills.md`
+§3. There is still no multi-node *coaching* graph — the "wait for user /
+re-evaluate / more gaps?" loop described conceptually in CLAUDE.md §11 is
+still implemented as plain FastAPI request/response endpoints in
 `app/coaching/router.py` calling ordinary Python functions, **not** as
-LangGraph nodes/edges. `AgentState` (`app/agent/state.py`) is a `TypedDict`
-with `ticket`, `analysis`, and `coaching_history` — it is reused by the
-single analysis node regardless of whether the call originates from
+LangGraph nodes/edges, because each of those steps is a separate HTTP
+round-trip driven by the user — that reasoning is unchanged by this pass.
+
+`AgentState` (`app/agent/state.py`) is a `TypedDict` with `ticket`,
+`analysis`, `coaching_history`, and now `retrieved_context` (Phase 3) — it
+is reused by both nodes regardless of whether the call originates from
 `/api/analyse` or from the coaching re-analysis step.
 
 The graph is compiled once and memoized at module level (`_compiled_graph`
@@ -271,10 +315,13 @@ Settings actually defined today:
 | `readiness_pass_threshold` | Yes | Used by `stop_condition.py` (per-criterion stop bar, not `overall_readiness`) |
 
 **External services actually called at runtime today:** the Anthropic
-Claude API (analysis + coaching) and, as of Phase 3, the OpenAI embeddings
-API and a local persistent ChromaDB instance (both only from within
-`app/rag/`, not yet from the analysis/coaching pipeline). Supabase/Postgres
-and Jira are still configured but not yet integrated or called anywhere.
+Claude API (analysis + coaching) and the OpenAI embeddings API + a local
+persistent ChromaDB instance — the latter two now called from the
+analysis/coaching pipeline itself (via `app/agent/rag_integration.py`), not
+only from within `app/rag/`. Every one of those calls fails safe: if
+`OPENAI_API_KEY` is unset or the call fails, analysis/coaching proceed with
+no RAG context rather than erroring. Supabase/Postgres and Jira are still
+configured but not yet integrated or called anywhere.
 
 CORS is configured with a single allowed origin (`settings.frontend_url`),
 all methods and headers, credentials allowed.
@@ -288,24 +335,26 @@ all methods and headers, credentials allowed.
 | Coaching | **Implemented** | Full start → message → reanalyze → next → finalize loop in `app/coaching/`, covered by `tests/test_coaching.py` |
 | Frontend integration | **Not implemented** | No frontend code found in this repository |
 | Jira integration | **Not implemented** | `app/jira/` is an empty stub; no OAuth, no REST client, no routes |
-| RAG | **Implemented** (standalone module, not yet integrated) | `app/rag/`, `tests/test_rag.py` — ingestion, embedding, ChromaDB storage/retrieval with `project_id` filtering all implemented and tested; not yet wired into analysis/coaching prompts, no API router, no `project_id` on tickets/sessions. See §11. |
+| RAG | **Implemented** — standalone module + evaluation-scoped prompt integration | `app/rag/`, `app/agent/rag_integration.py`, `tests/test_rag.py`, `tests/test_rag_integration.py` — ingestion, embedding, retrieval, and now analysis/coaching-finalize prompt integration are all implemented and tested. Uses a **temporary hardcoded `project_id="default"`** (see §11) — no API router, no real `project_id` on tickets/sessions, no Jira/frontend project context yet. |
 | Jira update | **Not implemented** | Depends on Jira integration, which does not exist; no approval endpoint exists either |
 | Deployment | **Not implemented** | No Dockerfile, no CI config, no Render/Vercel deployment config found in the repository |
 
-Everything under `analysis/`, `coaching/`, and `rag/` is complete and
-tested for its currently defined scope. RAG's scope is deliberately
-narrower than the other two (standalone module only, not yet integrated
-into the product workflow) — that narrower scope is itself fully
-implemented, not partially built. Everything else (`auth/`, `database/`,
-`jira/`, `tickets/`) is an untouched empty stub.
+Everything under `analysis/`, `coaching/`, and `rag/` (including its
+`app/agent/rag_integration.py` glue) is complete and tested for its
+currently defined scope. RAG's scope is deliberately narrower than the
+other two in one specific way: it evaluates against a single, explicitly
+temporary `project_id="default"` rather than real per-project context —
+that narrower scope is itself fully implemented, not partially built.
+Everything else (`auth/`, `database/`, `jira/`, `tickets/`) is an untouched
+empty stub.
 
-## 11. RAG module (Phase 3, standalone)
+## 11. RAG module (Phase 3: standalone module + evaluation-scoped prompt integration)
 
 `app/rag/` is a self-contained subsystem for project-scoped document
-ingestion and semantic retrieval. It is not called from `analysis/`,
-`coaching/`, or `agent/`, and has no API router — see CLAUDE.md §20 and the
-Phase 3 task constraints for why prompt integration is deliberately
-deferred.
+ingestion and semantic retrieval — unchanged from its first Phase 3 pass
+(see the ingestion/retrieval diagrams below). It still has no API router.
+What's new in this pass is that `analysis/` and `coaching/` now call into
+it, through a dedicated glue module rather than directly.
 
 ```
 DocumentInput {project_id, document_type, title, text}
@@ -361,16 +410,110 @@ Key implementation details:
 - No document-management layer exists (no update/delete, no listing) —
   only `add_document()` (create) and `retrieve()` (query), matching the
   "do not build a complicated document management system" constraint.
-- Not yet built, intentionally: an API router, prompt-integration into
-  `analysis/`/`coaching/`, and a `project_id` concept on `TicketInput` or
-  `CoachingSessionState` (nothing upstream currently produces a
-  `project_id` to pass in).
+- Not yet built, intentionally: an API router, and a real `project_id`
+  concept on `TicketInput` or `CoachingSessionState` (nothing upstream
+  currently produces a real one to pass in).
 
-Tests (`tests/test_rag.py`) split into two groups: pure/deterministic
-tests that always run (chunking, input validation, and one deliberate
-invalid-API-key call that exercises `EmbeddingError` against the real
-OpenAI API), and embedding-dependent end-to-end tests (ingest → retrieve,
-cross-project isolation, metadata preservation) that are skipped when
-`OPENAI_API_KEY` is not configured locally — mirroring how
-`test_analysis.py`/`test_coaching.py` depend on a locally-configured
-`ANTHROPIC_API_KEY`.
+### Prompt integration: `app/agent/rag_integration.py`
+
+This is the one new file that connects `app/rag/` to `analysis/`/
+`coaching/`. It exists specifically so the connecting logic — the
+temporary project scope and the fail-safe wrapper — lives in exactly one
+place, rather than being duplicated at each call site (`app/agent/graph.py`
+and `app/coaching/router.py`).
+
+```
+get_retrieved_context(query_text, project_id="default", k=5)
+        ↓
+if not settings.openai_api_key: return []           — never even attempts the call
+        ↓
+retrieve(project_id, query_text, k)                  app/rag/store.py, unmodified
+        ↓
+except (EmbeddingError, RAGStoreError, ValueError):  logs a warning, returns []
+        ↓
+list[RetrievedChunk]  (never raises)
+```
+
+```
+format_context_for_prompt(chunks) -> str
+  — "" for an empty list
+  — otherwise: "Relevant project context (... supplementary, not
+    authoritative ...):\n\n[document_type] title:\ntext\n\n..." for each chunk
+```
+
+**`TEMP_EVAL_PROJECT_ID = "default"`** is the one hardcoded project
+identifier in the codebase — see CLAUDE.md §7 "Temporary evaluation scope"
+for the full rationale and its required replacement path. It is resolved
+internally by `get_retrieved_context()`'s default argument and by the two
+call sites (`retrieve_context_node` in `app/agent/graph.py`,
+`finalize_coaching_session()` in `app/coaching/router.py`) — it is never
+accepted from any request schema, so `TicketInput`, `MessageRequest`, and
+every other API contract are byte-for-byte unchanged from Phase 2.
+
+**Two call sites, both going through `get_retrieved_context()`:**
+1. `retrieve_context_node` (`app/agent/graph.py`) — the new first node in
+   the analysis graph (see §3, §5). Covers `/api/analyse`,
+   `/api/coaching/start`, and `/api/coaching/{id}/reanalyze`, since all
+   three call `analyze_ticket()`.
+2. `finalize_coaching_session()` (`app/coaching/router.py`) — a direct
+   call right before `build_finalize_user_prompt()`, since `/finalize`
+   never goes through `analyze_ticket()`/the graph. Retrieves fresh at
+   finalize time (ticket title + description as the query), rather than
+   reusing whatever was retrieved at `/start`.
+
+**Fail-safe is the load-bearing property of this integration.** Before
+this pass, `OPENAI_API_KEY` was not configured in the development
+environment used to build Phase 3, meaning an unconditional retrieval call
+would have broken every existing analysis/coaching test. `get_retrieved_context()`
+short-circuits to `[]` before even attempting a call when the key is
+unset, and separately catches `EmbeddingError`/`RAGStoreError`/`ValueError`
+around the call regardless — so `analyze_ticket()` and `/finalize`
+produce byte-for-byte the same prompts as before Phase 3 whenever no RAG
+context is available, which is exactly why all pre-existing Phase 1/2
+tests still pass unmodified (see `tests/test_rag_integration.py`'s
+`test_retrieve_context_node_never_raises_when_rag_unavailable` and
+`test_analyze_ticket_still_succeeds_when_rag_retrieval_raises`).
+
+**Prompt shape change, only when context exists:** `build_user_prompt()`
+(`app/agent/prompts.py`) and `build_finalize_user_prompt()`
+(`app/coaching/prompts.py`) each gained an optional `retrieved_context`
+parameter, appending a "Relevant project context" section via
+`format_context_for_prompt()` — the same conditional-section pattern
+already used for "Previous clarification." When `retrieved_context` is
+`None` or `[]` (the case for every pre-Phase-3 caller and every call in
+this environment without `OPENAI_API_KEY`), the section is omitted
+entirely and the prompt is identical to before.
+
+Tests:
+- `tests/test_rag.py` (unchanged) — the standalone module, as before.
+- `tests/test_rag_integration.py` (new) — deterministic prompt-construction
+  tests (context section present/absent, using hand-built `RetrievedChunk`
+  objects, no API calls), fail-safe behaviour tests for
+  `get_retrieved_context()` and `retrieve_context_node` (monkeypatched
+  failures), and one real-Claude-call regression test proving
+  `analyze_ticket()` still succeeds when RAG retrieval raises.
+- `tests/test_analysis.py`, `tests/test_coaching.py` — unmodified except
+  one spy function signature in `test_coaching.py` (`_spy_build_user_prompt`
+  in `test_coaching_finalize_prompt_receives_complete_context`) needed a new
+  optional `retrieved_context=None` parameter to match
+  `build_finalize_user_prompt()`'s new signature; the test's assertions are
+  unchanged.
+
+### With-RAG vs. without-RAG evaluation: `scripts/rag_eval.py`
+
+A manual script, not part of the pytest suite — deliberately, since judging
+whether retrieved context made an analysis *better* is a human read of the
+output, not something to assert in CI given Claude's output is
+non-deterministic. It seeds a few representative documents into
+`project_id="default"`, then runs a couple of deliberately vague
+representative tickets through analysis twice (retrieval forced on vs.
+off) and prints both results side by side. Run with:
+
+```
+python -m scripts.rag_eval
+```
+
+If `OPENAI_API_KEY` is not configured, the script prints a warning and
+still runs (seeding fails safely per-document, retrieval fails safe on
+both runs) — the two runs will be identical in that case, which the
+warning explains rather than leaving unexplained.

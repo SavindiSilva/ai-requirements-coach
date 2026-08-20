@@ -2,10 +2,11 @@
 
 > This document captures conventions that are **already established** in the
 > codebase, so future work follows the same style instead of introducing
-> parallel patterns. It now includes RAG (Phase 3, standalone module — see
-> §8), added once implemented rather than planned in advance. It still does
-> **not** cover Jira, auth, or database patterns — none of those have been
-> implemented yet, so there is nothing real to document for them.
+> parallel patterns. It now includes RAG (Phase 3: the standalone module in
+> §8, and its prompt integration into analysis/coaching in §9), added once
+> implemented rather than planned in advance. It still does **not** cover
+> Jira, auth, or database patterns — none of those have been implemented
+> yet, so there is nothing real to document for them.
 
 ## 1. Claude structured-output pattern
 
@@ -82,15 +83,17 @@ rather than each module creating its own client.
   three-way split (node orchestration / prompt building / LLM call) rather
   than inlining prompt strings or API calls into the node function.
 - **Only use LangGraph for genuinely multi-node/stateful orchestration.**
-  The existing analysis graph is a single node (`START →
-  analyze_requirement_node → END`) because that's genuinely all Phase 1
-  needs. The multi-step coaching loop (start/answer/reanalyze/next/finalize)
-  is **not** implemented as LangGraph nodes — it's plain FastAPI endpoints
-  calling ordinary functions, because each step is a separate HTTP
-  round-trip driven by the user, not an in-process loop. Don't force
+  The analysis graph started as a single node and, in Phase 3, grew to two
+  (`START → retrieve_context_node → analyze_requirement_node → END`) when a
+  genuinely internal, in-process step (RAG retrieval) was added ahead of
+  it — that's the concrete example of when growing the graph is the right
+  call. The multi-step coaching loop (start/answer/reanalyze/next/finalize)
+  is still **not** implemented as LangGraph nodes — it's plain FastAPI
+  endpoints calling ordinary functions, because each step is a separate
+  HTTP round-trip driven by the user, not an in-process loop. Don't force
   something into a LangGraph node just because it's "part of the agent" —
-  match the tool to whether the step is an internal transition or an
-  external request/response boundary.
+  match the tool to whether the step is an internal transition (add a node)
+  or an external request/response boundary (don't).
 
 ## 4. FastAPI route conventions
 
@@ -261,3 +264,58 @@ duplicating that flow description here.
   extends the existing convention (§6) of tests depending on a real,
   locally-configured API key rather than mocking the client, applied to a
   second external service.
+
+## 9. Wiring an optional external capability into an existing pipeline safely
+
+`app/agent/rag_integration.py` is the concrete example of this pattern:
+connecting RAG retrieval into the analysis/coaching prompts without being
+allowed to change existing behaviour when the capability is unavailable.
+Reuse this shape for the next optional external capability added to an
+existing pipeline (e.g. Jira context later).
+
+- **One glue module, not logic duplicated at each call site.** Both call
+  sites (`retrieve_context_node` in `app/agent/graph.py`,
+  `finalize_coaching_session()` in `app/coaching/router.py`) call the same
+  `get_retrieved_context()` rather than each re-implementing the
+  short-circuit/try-except. If a second integration point needs the same
+  optional capability, make it call the existing wrapper — don't copy the
+  fail-safe logic inline again.
+- **Fail safe by construction, not by hoping callers remember to catch.**
+  `get_retrieved_context()` never raises: it returns `[]` (a) before even
+  attempting a call when the prerequisite config (`settings.openai_api_key`)
+  is missing, and (b) whenever the underlying call raises any of its known
+  failure types. Callers (`retrieve_context_node`, `finalize_coaching_session`)
+  don't need their own try/except — the guarantee lives in the one function
+  that owns the integration, the same "enforce the invariant where it's
+  owned" principle as §8's `project_id` filtering.
+- **The empty-input case must reproduce the pre-integration output
+  exactly.** `build_user_prompt()`/`build_finalize_user_prompt()` only add
+  their new prompt section when the optional data is genuinely present
+  (`if context_text:` / `if retrieved_context:`) — passing `None` or `[]`
+  must be indistinguishable from the parameter not existing at all. This is
+  what let Phase 1/2 tests keep passing unmodified: every pre-Phase-3
+  caller either omits the new parameter or naturally receives `[]` from
+  the fail-safe wrapper.
+- **A new optional trailing parameter, not a new required one.** Both
+  `build_user_prompt()` and `build_finalize_user_prompt()` added
+  `retrieved_context` as the *last*, default-`None` parameter — existing
+  positional and keyword call sites keep working unchanged. (One exception
+  surfaced this: a test in `tests/test_coaching.py` monkeypatches
+  `build_finalize_user_prompt` with its own hand-written stub function, and
+  Python doesn't apply the real function's defaults to a replacement stub —
+  the stub itself needed the new parameter added, with its own `=None`
+  default, to keep accepting the same call. That's a test-infrastructure
+  consequence of monkeypatching a whole function rather than a design
+  problem with the parameter itself.)
+- **Format the optional content once, centrally.** `format_context_for_prompt()`
+  lives in the same glue module as the retrieval wrapper, not duplicated in
+  both `app/agent/prompts.py` and `app/coaching/prompts.py` — both prompt
+  builders import and call the same formatter.
+- **A single, clearly-named temporary constant for scaffolding that must
+  not become permanent.** `TEMP_EVAL_PROJECT_ID = "default"` lives in
+  exactly one file, is never accepted from a request schema, and is
+  documented at its definition and in CLAUDE.md §7 as scaffolding to be
+  replaced — not extended. If a future integration needs a similar
+  temporary placeholder before its real dependency exists, follow this
+  shape (one named constant, one file, explicit removal plan) rather than
+  hardcoding the placeholder value at each use site.

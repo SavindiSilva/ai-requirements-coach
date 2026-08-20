@@ -244,7 +244,7 @@ Completed:
 - Maximum clarification rounds
 - Coaching tests
 
-### Phase 3: RAG Foundation (standalone module)
+### Phase 3: RAG Foundation (standalone module + evaluation-scoped prompt integration)
 
 Completed:
 
@@ -253,30 +253,61 @@ Completed:
 - Project-scoped semantic retrieval via `app/rag/store.py::retrieve`, with `project_id` always enforced as a metadata filter so one project's chunks can never be returned for another
 - Typed errors: `EmbeddingError` (embedding failures), `RAGStoreError` (ChromaDB read/write failures)
 - RAG tests: chunking, ingestion, retrieval, project_id isolation, metadata preservation, invalid input, embedding failure
+- RAG retrieval wired into the analysis pipeline (`app/agent/graph.py`) and coaching finalization (`app/coaching/router.py`), using a **temporary hardcoded `project_id="default"`** (see "Temporary evaluation scope" below)
+- Retrieval fails safely: skipped entirely when `OPENAI_API_KEY` is not configured, and any embedding/store failure degrades to "no context" rather than breaking analysis/coaching
+- Deterministic prompt-construction tests for the context-injection logic
+- A manual, non-CI with-RAG vs. without-RAG comparison script (`scripts/rag_eval.py`)
+
+### Temporary evaluation scope: `project_id="default"`
+
+This is a deliberate, explicitly scoped exception to the rule in section 20
+and section 28 below: RAG prompt integration was implemented ahead of real
+Jira/frontend project context, using a single hardcoded constant
+(`project_id="default"`) purely so retrieval quality and prompt
+integration could be evaluated now, rather than blocked on Jira/frontend
+work.
+
+This is temporary scaffolding, not a designed feature:
+
+- The constant lives in one place, clearly named and commented as
+  temporary (`app/agent/rag_integration.py`).
+- No new required fields were added to `TicketInput`, `MessageRequest`, or
+  any other request schema — the constant is resolved internally, never
+  accepted from a caller.
+- It must be replaced by a real `project_id` sourced from the Jira/frontend
+  workflow before RAG integration is considered production-ready. Do not
+  extend this pattern elsewhere (no additional hardcoded project ids, no
+  features built around `"default"` as if it were a real project).
 
 Not yet done, by design (see docs/architecture.md):
 
 - No API router for RAG
-- Not wired into the analysis/coaching prompts
-- No `project_id` on `TicketInput` or coaching session state yet
+- No `project_id` on `TicketInput` or coaching session state (still
+  resolved internally to the temporary constant)
+- No real multi-project selection — only the single `"default"` scope
+  exists
 
 ## Current Priority
 
-The core AI analysis, coaching foundation, and standalone RAG foundation are implemented.
+The core AI analysis, coaching foundation, and RAG foundation (including
+evaluation-scoped prompt integration) are implemented.
 
 The immediate product priority is frontend integration.
 
 The frontend should consume the real backend APIs instead of mock analysis/coaching data.
 
-Do not begin RAG prompt integration until the frontend/Jira workflow provides the project context required for project-scoped retrieval.
+Replacing the temporary `project_id="default"` constant with real project
+context from the frontend/Jira workflow is required before RAG can be
+considered production-ready — track this alongside frontend/Jira
+integration, not as a separate later phase.
 
-Do not rebuild the existing AI analysis, coaching, or standalone RAG functionality unless a concrete bug or missing requirement is identified.
+Do not rebuild the existing AI analysis, coaching, or RAG functionality unless a concrete bug or missing requirement is identified.
 
 ## Remaining Implementation Order
 
 1. Frontend integration
 2. Jira integration
-3. RAG prompt integration (the standalone RAG module itself is already implemented - see Phase 3 above)
+3. Replace the temporary `project_id="default"` RAG scaffolding with real project context from Jira/frontend
 4. User-approved Jira update
 5. End-to-end testing
 6. Deployment
@@ -693,6 +724,14 @@ For the MVP, RAG should remain project-scoped and minimal.
 
 Do not introduce RAG into the analysis pipeline until the retrieval quality and metadata filtering can be tested reliably.
 
+Exception (Phase 3 evaluation): RAG retrieval has been integrated into the
+analysis and coaching-finalization prompts using a temporary, explicitly
+labeled `project_id="default"` constant, specifically to evaluate
+retrieval quality and prompt integration before real project context
+exists. See section 7 and docs/architecture.md for what this covers and
+its temporary status. This does not change the rule for any other
+integration — do not hardcode identifiers elsewhere to force integration.
+
 ---
 
 # 21. Database
@@ -891,8 +930,8 @@ The next implementation stages are:
 
 1. Frontend integration with existing analysis/coaching APIs
 2. Jira OAuth and Jira project/ticket retrieval
-3. Connect Jira tickets and project context to the existing analysis workflow
-4. Wire the standalone RAG module into analysis/coaching using project-scoped retrieval
+3. Connect Jira tickets and project context to the existing analysis workflow, replacing the temporary `project_id="default"` RAG constant with real project context
+4. (Done, evaluation-scoped) RAG retrieval wired into analysis/coaching — see section 7
 5. Improved requirement review and explicit approval
 6. User-approved Jira update
 7. End-to-end testing
@@ -900,9 +939,13 @@ The next implementation stages are:
 
 Important dependency:
 
-RAG prompt integration should not begin until a reliable project_id is
-available from the frontend/Jira workflow. Do not invent or hardcode project
-identifiers to force RAG integration.
+RAG prompt integration now exists, but only against a temporary hardcoded
+`project_id="default"` constant (see section 7) — explicitly for
+evaluating retrieval quality before real project context exists. This is
+scaffolding, not a production design: it must be replaced by a reliable
+project_id sourced from the frontend/Jira workflow before RAG can be
+considered production-ready, and this hardcode-a-project-id shortcut must
+not be reused elsewhere.
 
 Do not rebuild completed backend functionality unless required to support
 an integration.

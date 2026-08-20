@@ -656,7 +656,7 @@ def test_coaching_finalize_prompt_receives_complete_context(monkeypatch):
 
     captured: dict = {}
 
-    def _spy_build_user_prompt(ticket, analysis, coaching_history, stop_reason):
+    def _spy_build_user_prompt(ticket, analysis, coaching_history, stop_reason, retrieved_context=None):
         captured["ticket"] = ticket
         captured["analysis"] = analysis
         captured["coaching_history"] = coaching_history
