@@ -1,0 +1,14 @@
+@import 'tailwindcss';
+@import './styles/tokens.css';
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+::placeholder {
+  color: color-mix(in srgb, var(--color-text) 40%, transparent);
+}
