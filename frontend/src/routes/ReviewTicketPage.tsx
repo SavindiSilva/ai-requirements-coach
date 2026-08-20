@@ -3,7 +3,9 @@ import { Button } from '../components/ui/Button';
 import { Field } from '../components/ui/Field';
 import { fieldInputClasses } from '../lib/fieldStyles';
 import { AnalysisResultView } from '../components/analysis/AnalysisResultView';
+import { CoachingPage } from './CoachingPage';
 import { useAnalyseTicket } from '../hooks/useAnalyseTicket';
+import { useStartCoaching } from '../hooks/useStartCoaching';
 import { ApiError } from '../lib/api/client';
 import type { TicketInput } from '../lib/types/analysis';
 
@@ -24,6 +26,7 @@ export function ReviewTicketPage() {
   const [description, setDescription] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const mutation = useAnalyseTicket();
+  const coachingMutation = useStartCoaching();
 
   const submittedTicket = mutation.data ? mutation.variables : undefined;
 
@@ -38,9 +41,18 @@ export function ReviewTicketPage() {
 
   function handleReset() {
     mutation.reset();
+    coachingMutation.reset();
     setTitle('');
     setDescription('');
     setFieldErrors({});
+  }
+
+  function handleStartCoaching() {
+    if (submittedTicket) coachingMutation.mutate(submittedTicket);
+  }
+
+  if (coachingMutation.isSuccess && submittedTicket) {
+    return <CoachingPage ticket={submittedTicket} coaching={coachingMutation.data} />;
   }
 
   if (mutation.isSuccess && submittedTicket) {
@@ -53,6 +65,19 @@ export function ReviewTicketPage() {
           </Button>
         </div>
         <AnalysisResultView ticket={submittedTicket} result={mutation.data} />
+
+        <div className="mt-6 flex flex-col items-start gap-3">
+          {coachingMutation.isError && (
+            <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-3.5 py-3 text-sm text-[var(--color-danger)]">
+              {coachingMutation.error instanceof ApiError
+                ? coachingMutation.error.message
+                : 'Something went wrong. Please try again.'}
+            </div>
+          )}
+          <Button onClick={handleStartCoaching} disabled={coachingMutation.isPending}>
+            {coachingMutation.isPending ? 'Starting…' : 'Start AI Coaching'}
+          </Button>
+        </div>
       </div>
     );
   }
