@@ -199,6 +199,18 @@ in §3. `/finalize` is the one coaching step that never went through
 `analyze_ticket()`, so it has its own direct `get_retrieved_context()` call
 right before building its prompt.
 
+The frontend (`frontend/src/routes/CoachingPage.tsx`) now consumes
+`/finalize` directly: once a session's `is_complete` is `true`, a "View
+Development-Ready Ticket" button calls it via a dedicated
+`useFinalizeCoaching()` mutation
+(`frontend/src/hooks/useFinalizeCoaching.ts`) and renders the result with
+`frontend/src/components/coaching/FinalRequirementView.tsx`. No backend
+change was needed — the existing `FinalizeResponse` contract already
+carried everything the view needs (user story, acceptance criteria, scope,
+assumptions, dependencies, remaining gaps, current scores). Because
+`/finalize` is idempotent server-side (see §4 above), the frontend re-calls
+it on retry after a failed attempt without any special-casing.
+
 Notes on what is **not** implemented in this flow:
 - No user-approval endpoint (`POST /api/requirements/{id}/approve` from
   CLAUDE.md §24 does not exist).
@@ -333,7 +345,7 @@ all methods and headers, credentials allowed.
 | Core AI analysis | **Implemented** | `app/analysis/`, `app/agent/`, `POST /api/analyse`, `tests/test_analysis.py` |
 | Readiness scoring | **Implemented** | 4-criterion scoring + Python-computed `overall_readiness` in `app/agent/graph.py`; deterministic stop/gap logic in `app/coaching/stop_condition.py` |
 | Coaching | **Implemented** | Full start → message → reanalyze → next → finalize loop in `app/coaching/`, covered by `tests/test_coaching.py` |
-| Frontend integration | **Not implemented** | No frontend code found in this repository |
+| Frontend integration | **Partially implemented** | `frontend/` (React + Vite): `POST /api/analyse`, and the full coaching loop (`/start`, `/message`, `/reanalyze`, `/next`, `/finalize`) are wired to real backend calls under `frontend/src/lib/api/` and `frontend/src/hooks/`. No Jira UI, no approval/update flow, no persistence across page refresh (coaching state is React-in-memory only). |
 | Jira integration | **Not implemented** | `app/jira/` is an empty stub; no OAuth, no REST client, no routes |
 | RAG | **Implemented** — standalone module + evaluation-scoped prompt integration | `app/rag/`, `app/agent/rag_integration.py`, `tests/test_rag.py`, `tests/test_rag_integration.py` — ingestion, embedding, retrieval, and now analysis/coaching-finalize prompt integration are all implemented and tested. Uses a **temporary hardcoded `project_id="default"`** (see §11) — no API router, no real `project_id` on tickets/sessions, no Jira/frontend project context yet. |
 | Jira update | **Not implemented** | Depends on Jira integration, which does not exist; no approval endpoint exists either |

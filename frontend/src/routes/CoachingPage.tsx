@@ -4,7 +4,9 @@ import { Button } from '../components/ui/Button';
 import { Field } from '../components/ui/Field';
 import { fieldInputClasses } from '../lib/fieldStyles';
 import { ScoreBadge } from '../components/analysis/ScoreBadge';
+import { FinalRequirementView } from '../components/coaching/FinalRequirementView';
 import { useSubmitCoachingAnswer } from '../hooks/useSubmitCoachingAnswer';
+import { useFinalizeCoaching } from '../hooks/useFinalizeCoaching';
 import { ApiError } from '../lib/api/client';
 import type { CoachingStartResponse, CurrentScores } from '../lib/types/coaching';
 import type { TicketInput } from '../lib/types/analysis';
@@ -51,6 +53,11 @@ export function CoachingPage({ ticket, coaching }: CoachingPageProps) {
   const [answer, setAnswer] = useState('');
   const [answerError, setAnswerError] = useState<string | undefined>();
   const submitMutation = useSubmitCoachingAnswer();
+  const finalizeMutation = useFinalizeCoaching();
+
+  function handleFinalize() {
+    finalizeMutation.mutate(coaching.session_id);
+  }
 
   function handleSubmitAnswer(e: FormEvent) {
     e.preventDefault();
@@ -108,15 +115,35 @@ export function CoachingPage({ ticket, coaching }: CoachingPageProps) {
         </Card>
 
         <div className="flex flex-col gap-4">
-          {session.isComplete ? (
-            <Card className="p-5">
-              <p className="text-[15px] leading-relaxed">Coaching complete.</p>
-              <p className="mt-1.5 text-sm text-[color-mix(in_srgb,var(--color-text)_60%,transparent)]">
-                {session.stopReason
-                  ? (STOP_REASON_LABELS[session.stopReason] ?? session.stopReason)
-                  : ''}
-              </p>
-            </Card>
+          {finalizeMutation.isSuccess ? (
+            <FinalRequirementView result={finalizeMutation.data} />
+          ) : session.isComplete ? (
+            <>
+              <Card className="p-5">
+                <p className="text-[15px] leading-relaxed">Coaching complete.</p>
+                <p className="mt-1.5 text-sm text-[color-mix(in_srgb,var(--color-text)_60%,transparent)]">
+                  {session.stopReason
+                    ? (STOP_REASON_LABELS[session.stopReason] ?? session.stopReason)
+                    : ''}
+                </p>
+              </Card>
+
+              {finalizeMutation.isError && (
+                <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-3.5 py-3 text-sm text-[var(--color-danger)]">
+                  {finalizeMutation.error instanceof ApiError
+                    ? finalizeMutation.error.message
+                    : 'Something went wrong. Please try again.'}
+                </div>
+              )}
+
+              <Button onClick={handleFinalize} disabled={finalizeMutation.isPending}>
+                {finalizeMutation.isPending
+                  ? 'Generating…'
+                  : finalizeMutation.isError
+                    ? 'Retry'
+                    : 'View Development-Ready Ticket'}
+              </Button>
+            </>
           ) : (
             <>
               <Card className="p-5">

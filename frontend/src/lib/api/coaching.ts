@@ -3,6 +3,7 @@ import type {
   CoachingMessageResponse,
   CoachingNextResponse,
   CoachingStartResponse,
+  FinalizeResponse,
   ReanalyzeResponse,
 } from '../types/coaching';
 import type { TicketInput } from '../types/analysis';
@@ -21,4 +22,8 @@ export function reanalyzeCoaching(sessionId: string): Promise<ReanalyzeResponse>
 
 export function nextCoachingStep(sessionId: string): Promise<CoachingNextResponse> {
   return apiPost<CoachingNextResponse>(`/api/coaching/${sessionId}/next`, {});
+}
+
+export function finalizeCoaching(sessionId: string): Promise<FinalizeResponse> {
+  return apiPost<FinalizeResponse>(`/api/coaching/${sessionId}/finalize`, {});
 }

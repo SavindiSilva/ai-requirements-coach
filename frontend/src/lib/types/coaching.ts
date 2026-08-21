@@ -44,3 +44,21 @@ export interface CoachingNextResponse {
   question_count: number;
   current_scores: CurrentScores; // authoritative post-reanalysis value
 }
+
+export interface FinalRequirementContent {
+  user_story: string;
+  acceptance_criteria: string[];
+  scope: string[];
+  assumptions: string[];
+  dependencies: string[];
+}
+
+export interface FinalizeResponse {
+  session_id: string;
+  is_complete: boolean;
+  stop_reason: string | null;
+  final_requirement: FinalRequirementContent;
+  remaining_gaps: string[];
+  current_scores: CurrentScores;
+  question_count: number;
+}
