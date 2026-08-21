@@ -1,9 +1,16 @@
 // Mirrors app/analysis/schemas.py. Keep in sync by hand — do not add fields
 // the backend doesn't actually return.
 
+export interface RelatedIssue {
+  key: string;
+  relationship: string;
+  summary: string | null;
+}
+
 export interface TicketInput {
   title: string;
   description: string;
+  related_issues?: RelatedIssue[] | null;
 }
 
 export interface CriterionScore {

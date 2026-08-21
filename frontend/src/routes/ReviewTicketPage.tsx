@@ -3,6 +3,7 @@ import { Button } from '../components/ui/Button';
 import { Field } from '../components/ui/Field';
 import { fieldInputClasses } from '../lib/fieldStyles';
 import { AnalysisResultView } from '../components/analysis/AnalysisResultView';
+import { JiraImportFlow } from '../components/jira/JiraImportFlow';
 import { CoachingPage } from './CoachingPage';
 import { useAnalyseTicket } from '../hooks/useAnalyseTicket';
 import { useStartCoaching } from '../hooks/useStartCoaching';
@@ -14,6 +15,8 @@ interface FieldErrors {
   description?: string;
 }
 
+type TicketSource = 'manual' | 'jira';
+
 function validate(ticket: TicketInput): FieldErrors {
   const errors: FieldErrors = {};
   if (!ticket.title.trim()) errors.title = 'Title is required.';
@@ -22,6 +25,7 @@ function validate(ticket: TicketInput): FieldErrors {
 }
 
 export function ReviewTicketPage() {
+  const [source, setSource] = useState<TicketSource>('manual');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -42,6 +46,7 @@ export function ReviewTicketPage() {
   function handleReset() {
     mutation.reset();
     coachingMutation.reset();
+    setSource('manual');
     setTitle('');
     setDescription('');
     setFieldErrors({});
@@ -89,43 +94,72 @@ export function ReviewTicketPage() {
         Enter a ticket's title and description to get an AI-powered readiness analysis.
       </p>
 
-      <form onSubmit={handleSubmit} noValidate>
-        <Field label="Title" htmlFor="title" error={fieldErrors.title}>
-          <input
-            id="title"
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Add notification feature"
-            className={fieldInputClasses(!!fieldErrors.title)}
-            disabled={mutation.isPending}
-          />
-        </Field>
-
-        <Field label="Description" htmlFor="description" error={fieldErrors.description}>
-          <textarea
-            id="description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Describe what needs to be built..."
-            rows={6}
-            className={`${fieldInputClasses(!!fieldErrors.description)} resize-y`}
-            disabled={mutation.isPending}
-          />
-        </Field>
-
-        {mutation.isError && (
-          <div className="mb-4 rounded-[var(--radius-md)] border border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-3.5 py-3 text-sm text-[var(--color-danger)]">
-            {mutation.error instanceof ApiError
-              ? mutation.error.message
-              : 'Something went wrong. Please try again.'}
-          </div>
-        )}
-
-        <Button type="submit" disabled={mutation.isPending}>
-          {mutation.isPending ? 'Analysing…' : 'Analyse Ticket'}
+      <div className="mb-6 flex gap-2">
+        <Button
+          variant={source === 'manual' ? 'primary' : 'secondary'}
+          onClick={() => setSource('manual')}
+        >
+          Manual Entry
         </Button>
-      </form>
+        <Button variant={source === 'jira' ? 'primary' : 'secondary'} onClick={() => setSource('jira')}>
+          Import from Jira
+        </Button>
+      </div>
+
+      {source === 'jira' ? (
+        <div className="flex flex-col gap-3">
+          <JiraImportFlow onTicketReady={(ticket) => mutation.mutate(ticket)} />
+
+          {mutation.isPending && (
+            <p className="text-sm text-[color-mix(in_srgb,var(--color-text)_60%,transparent)]">Analysing…</p>
+          )}
+          {mutation.isError && (
+            <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-3.5 py-3 text-sm text-[var(--color-danger)]">
+              {mutation.error instanceof ApiError
+                ? mutation.error.message
+                : 'Something went wrong. Please try again.'}
+            </div>
+          )}
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} noValidate>
+          <Field label="Title" htmlFor="title" error={fieldErrors.title}>
+            <input
+              id="title"
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Add notification feature"
+              className={fieldInputClasses(!!fieldErrors.title)}
+              disabled={mutation.isPending}
+            />
+          </Field>
+
+          <Field label="Description" htmlFor="description" error={fieldErrors.description}>
+            <textarea
+              id="description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe what needs to be built..."
+              rows={6}
+              className={`${fieldInputClasses(!!fieldErrors.description)} resize-y`}
+              disabled={mutation.isPending}
+            />
+          </Field>
+
+          {mutation.isError && (
+            <div className="mb-4 rounded-[var(--radius-md)] border border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-3.5 py-3 text-sm text-[var(--color-danger)]">
+              {mutation.error instanceof ApiError
+                ? mutation.error.message
+                : 'Something went wrong. Please try again.'}
+            </div>
+          )}
+
+          <Button type="submit" disabled={mutation.isPending}>
+            {mutation.isPending ? 'Analysing…' : 'Analyse Ticket'}
+          </Button>
+        </form>
+      )}
     </div>
   );
 }

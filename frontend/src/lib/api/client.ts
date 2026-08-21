@@ -1,6 +1,6 @@
 // Base URL for the FastAPI backend. Configured via VITE_API_BASE_URL; falls
 // back to the local dev default (uvicorn app.main:app --reload -> :8000).
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 export type ApiErrorKind = 'validation' | 'request' | 'network';
 
@@ -37,6 +37,22 @@ function extractDetailMessage(body: unknown): string {
   return 'Request failed.';
 }
 
+async function handleResponse<TResponse>(response: Response): Promise<TResponse> {
+  if (!response.ok) {
+    let parsedBody: unknown = null;
+    try {
+      parsedBody = await response.json();
+    } catch {
+      // Non-JSON error body — fall through to the generic message.
+    }
+    const message = extractDetailMessage(parsedBody);
+    const kind: ApiErrorKind = response.status === 422 ? 'validation' : 'request';
+    throw new ApiError(message, kind, response.status);
+  }
+
+  return response.json() as Promise<TResponse>;
+}
+
 export async function apiPost<TResponse>(path: string, body: unknown): Promise<TResponse> {
   let response: Response;
   try {
@@ -52,17 +68,22 @@ export async function apiPost<TResponse>(path: string, body: unknown): Promise<T
     );
   }
 
-  if (!response.ok) {
-    let parsedBody: unknown = null;
-    try {
-      parsedBody = await response.json();
-    } catch {
-      // Non-JSON error body — fall through to the generic message.
-    }
-    const message = extractDetailMessage(parsedBody);
-    const kind: ApiErrorKind = response.status === 422 ? 'validation' : 'request';
-    throw new ApiError(message, kind, response.status);
+  return handleResponse<TResponse>(response);
+}
+
+export async function apiGet<TResponse>(path: string): Promise<TResponse> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch {
+    throw new ApiError(
+      'Could not reach the server. Check that the backend is running.',
+      'network',
+    );
   }
 
-  return response.json() as Promise<TResponse>;
+  return handleResponse<TResponse>(response);
 }

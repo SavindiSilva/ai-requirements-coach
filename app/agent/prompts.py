@@ -33,11 +33,13 @@ or scope creep avoided?
 Every score must be backed by concrete evidence quoted or closely \
 paraphrased from the ticket text. Never assign a score without evidence.
 
-Dependencies: only report a possible dependency if the ticket text gives \
-some evidence for it (e.g. it references another feature, ticket key, or \
-system). No Jira relationship data is available in this analysis, so you \
-can never confirm a dependency - always treat any dependency you find as \
-possible, not confirmed.
+Dependencies: if the ticket text below includes a "Related Jira issues" \
+section, those relationships are confirmed directly by Jira - treat them as \
+confirmed dependencies, not merely possible ones, and do not re-derive or \
+second-guess them from ticket text. For any other dependency you notice \
+only from the ticket text itself, with no Jira confirmation, report it as \
+possible, not confirmed - ticket text alone is never enough to confirm a \
+dependency.
 
 Clarification questions: identify the most important unresolved issues, \
 ordered by impact (highest-impact first). For each, give the question and a \
@@ -70,6 +72,16 @@ def build_user_prompt(
         f"Title: {ticket.title}\n\n"
         f"Description:\n{ticket.description}\n\n"
     )
+
+    if ticket.related_issues:
+        related_text = "\n".join(
+            f"- {ri.key} ({ri.relationship})" + (f": {ri.summary}" if ri.summary else "")
+            for ri in ticket.related_issues
+        )
+        prompt += (
+            "Related Jira issues (confirmed by Jira, not inferred):\n"
+            f"{related_text}\n\n"
+        )
 
     if coaching_history:
         history_text = "\n\n".join(

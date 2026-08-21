@@ -76,29 +76,41 @@ app/
 │   ├── chunking.py         pure word-based chunk_text()
 │   ├── embeddings.py       OpenAI embedding client wrapper, EmbeddingError
 │   └── store.py            ChromaDB PersistentClient, add_document(), retrieve(), RAGStoreError
+├── jira/                Jira OAuth 2.0 (3LO) + Jira Cloud REST API v3 reads
+│   ├── router.py          /jira/authorize, /jira/callback, /api/jira/* (two APIRouters)
+│   ├── oauth.py           Atlassian token exchange/refresh + accessible-resources lookup
+│   ├── client.py          authenticated Jira REST calls (projects/issues/issue detail)
+│   ├── parsing.py         pure: ADF→plain-text, issuelinks/parent/subtasks→RelatedIssue
+│   ├── store.py           TEMPORARY in-memory connection + OAuth CSRF-state store
+│   ├── schemas.py         JiraProject, JiraIssueSummary, JiraIssueDetail, JiraStatusResponse
+│   └── state.py           JiraConnectionState TypedDict
 ├── auth/                empty (__init__.py only) — not started
 ├── database/            empty (__init__.py only) — not started
-├── jira/                empty (__init__.py only) — not started
 └── tickets/             empty (__init__.py only) — not started
 
 tests/
 ├── test_analysis.py       Phase 1 endpoint tests (real Claude API, no mocks) — unchanged
 ├── test_coaching.py       Phase 2 endpoint + pure-logic tests — unchanged
 ├── test_rag.py             Phase 3 standalone RAG tests — unchanged
-└── test_rag_integration.py Phase 3 prompt-integration tests: deterministic prompt-construction
-                             and fail-safe-retrieval tests, plus one real-Claude-call regression test
+├── test_rag_integration.py Phase 3 prompt-integration tests: deterministic prompt-construction
+│                            and fail-safe-retrieval tests, plus one real-Claude-call regression test
+└── test_jira.py            Jira module tests: pure parsing logic, in-memory store,
+                             monkeypatched-httpx OAuth/REST calls, endpoint tests, and
+                             deterministic related_issues prompt-wiring tests (see §12)
 
 scripts/
 └── rag_eval.py           manual, non-CI with-RAG vs. without-RAG comparison (not part of pytest)
 ```
 
-`auth/`, `database/`, `jira/`, and `tickets/` exist only as empty package
-stubs (`__init__.py` with zero content). No code has been written in any of
-them. `rag/` itself (chunking/embeddings/store/schemas) was not modified in
-this pass — the integration lives entirely in the new
+`auth/`, `database/`, and `tickets/` exist only as empty package stubs
+(`__init__.py` with zero content). No code has been written in any of them.
+`rag/` itself (chunking/embeddings/store/schemas) was not modified in this
+pass — the RAG integration lives entirely in
 `app/agent/rag_integration.py`, plus small additive changes to
 `app/agent/graph.py`, `app/agent/prompts.py`, `app/coaching/prompts.py`,
-and `app/coaching/router.py` (see §3, §4, §11).
+and `app/coaching/router.py` (see §3, §4, §11). `app/jira/` is new (see
+§12) and is unrelated to the RAG integration - it does not yet feed a real
+`project_id` into it (see §12's "Not yet done" list).
 
 ## 3. Analysis flow (Phase 1)
 
@@ -121,6 +133,8 @@ build_system_prompt() + build_user_prompt(ticket, coaching_history,
                                             retrieved_context)   app/agent/prompts.py
   — appends a "Relevant project context" section only if retrieved_context
     is non-empty; identical output to pre-Phase-3 otherwise
+  — appends a "Related Jira issues" section only if ticket.related_issues
+    is non-empty (see §12) — told to Claude as confirmed, not inferred
         ↓
 run_structured_analysis()               app/agent/llm.py
         ↓
@@ -286,11 +300,20 @@ global, `get_graph()`).
 | POST | `/api/coaching/{session_id}/message` | `app/coaching/router.py` | Record the user's answer |
 | POST | `/api/coaching/{session_id}/next` | `app/coaching/router.py` | Decide stop-or-continue; ask next question if continuing |
 | POST | `/api/coaching/{session_id}/finalize` | `app/coaching/router.py` | Generate the final development-ready requirement |
+| GET | `/jira/authorize` | `app/jira/router.py` (`oauth_router`) | Redirect to Atlassian's OAuth consent screen |
+| GET | `/jira/callback` | `app/jira/router.py` (`oauth_router`) | OAuth redirect target — exchanges code for tokens, stores connection |
+| GET | `/api/jira/status` | `app/jira/router.py` | Whether a Jira connection is currently stored |
+| GET | `/api/jira/projects` | `app/jira/router.py` | List accessible Jira projects |
+| GET | `/api/jira/projects/{project_id}/issues` | `app/jira/router.py` | List issues in a project |
+| GET | `/api/jira/issues/{issue_key}` | `app/jira/router.py` | Full issue detail, including related-issue links |
+| GET | `/api/jira/issues/{issue_key}/links` | `app/jira/router.py` | Just the related-issue links for an issue |
 
 Endpoints listed in CLAUDE.md §24 that **do not exist yet**: `GET
-/api/coaching/{session_id}`, `POST /api/requirements/{id}/approve`, and all
-`GET /api/jira/...` endpoints. `app/main.py` has commented-out placeholder
-imports for a `jira_router` and `tickets_router` that are not yet built.
+/api/coaching/{session_id}`, `POST /api/requirements/{id}/approve`, and
+`POST /api/jira/issues/{issue_key}/update` (Jira writes are explicitly out
+of scope until the deferred approval feature exists). `app/main.py` has a
+commented-out placeholder import for a `tickets_router` that is not yet
+built.
 
 ## 8. Current state/persistence approach
 
@@ -303,8 +326,15 @@ imports for a `jira_router` and `tickets_router` that are not yet built.
   processes" — pending real DB-backed persistence.
 - **Analysis results** (Phase 1, standalone `/api/analyse` calls): not
   persisted at all — returned directly in the HTTP response and discarded.
+- **Jira connection**: a single process-local dict in `app/jira/store.py`
+  (`_CONNECTION`) holding one OAuth token set + cloud id — explicitly
+  documented in that module's docstring as "TEMPORARY SCAFFOLDING - NOT
+  SUITABLE FOR PRODUCTION", mirroring the coaching store's caveat. Supports
+  exactly one Jira connection process-wide (there is no user concept to
+  scope it by yet); does not survive a restart.
 - **No auth**: `app/auth/` is an empty stub; there is no session/user
-  concept, so coaching sessions are not scoped to any user.
+  concept, so coaching sessions and the Jira connection are not scoped to
+  any user.
 
 ## 9. Configuration and external services
 
@@ -322,18 +352,21 @@ Settings actually defined today:
 | `anthropic_api_key`, `claude_model` | Yes | Used by `app/agent/llm.py::get_client()` |
 | `openai_api_key`, `embedding_model` | Yes | Used by `app/rag/embeddings.py::get_embedding_client()` — not yet used by anything outside `app/rag/` |
 | `chroma_persist_dir` | Yes | Used by `app/rag/store.py::get_chroma_client()` (`chromadb.PersistentClient(path=...)`) |
-| `jira_client_id`, `jira_client_secret`, `jira_redirect_uri`, `jira_scopes` | No | Declared, unused — no Jira code exists yet |
+| `jira_client_id`, `jira_client_secret`, `jira_redirect_uri`, `jira_scopes` | Yes | Used by `app/jira/oauth.py`; `jira_scopes` defaults to `"read:jira-work offline_access"` (no `write:jira-work` - least privilege until the deferred Jira-update feature exists) |
 | `max_clarification_rounds` | Yes | Used by `stop_condition.py` and the analysis system prompt (caps question count) |
 | `readiness_pass_threshold` | Yes | Used by `stop_condition.py` (per-criterion stop bar, not `overall_readiness`) |
 
 **External services actually called at runtime today:** the Anthropic
-Claude API (analysis + coaching) and the OpenAI embeddings API + a local
-persistent ChromaDB instance — the latter two now called from the
-analysis/coaching pipeline itself (via `app/agent/rag_integration.py`), not
-only from within `app/rag/`. Every one of those calls fails safe: if
-`OPENAI_API_KEY` is unset or the call fails, analysis/coaching proceed with
-no RAG context rather than erroring. Supabase/Postgres and Jira are still
-configured but not yet integrated or called anywhere.
+Claude API (analysis + coaching), the OpenAI embeddings API + a local
+persistent ChromaDB instance, and now Atlassian's OAuth endpoints
+(`auth.atlassian.com`) plus the Jira Cloud REST API v3
+(`api.atlassian.com/ex/jira/{cloud_id}/...`) via `app/jira/`. The
+OpenAI/ChromaDB pair fails safe (see below); the Jira calls do **not** fail
+safe in the same way - `app/jira/router.py` translates
+`JiraNotConnectedError` to `401` and `JiraAPIError`/`JiraOAuthError` to
+`502`, since there is no "degrade gracefully" option for a user-initiated
+Jira read (unlike RAG, which is optional background context). Supabase/
+Postgres is still configured but not yet integrated or called anywhere.
 
 CORS is configured with a single allowed origin (`settings.frontend_url`),
 all methods and headers, credentials allowed.
@@ -345,20 +378,21 @@ all methods and headers, credentials allowed.
 | Core AI analysis | **Implemented** | `app/analysis/`, `app/agent/`, `POST /api/analyse`, `tests/test_analysis.py` |
 | Readiness scoring | **Implemented** | 4-criterion scoring + Python-computed `overall_readiness` in `app/agent/graph.py`; deterministic stop/gap logic in `app/coaching/stop_condition.py` |
 | Coaching | **Implemented** | Full start → message → reanalyze → next → finalize loop in `app/coaching/`, covered by `tests/test_coaching.py` |
-| Frontend integration | **Partially implemented** | `frontend/` (React + Vite): `POST /api/analyse`, and the full coaching loop (`/start`, `/message`, `/reanalyze`, `/next`, `/finalize`) are wired to real backend calls under `frontend/src/lib/api/` and `frontend/src/hooks/`. No Jira UI, no approval/update flow, no persistence across page refresh (coaching state is React-in-memory only). |
-| Jira integration | **Not implemented** | `app/jira/` is an empty stub; no OAuth, no REST client, no routes |
-| RAG | **Implemented** — standalone module + evaluation-scoped prompt integration | `app/rag/`, `app/agent/rag_integration.py`, `tests/test_rag.py`, `tests/test_rag_integration.py` — ingestion, embedding, retrieval, and now analysis/coaching-finalize prompt integration are all implemented and tested. Uses a **temporary hardcoded `project_id="default"`** (see §11) — no API router, no real `project_id` on tickets/sessions, no Jira/frontend project context yet. |
-| Jira update | **Not implemented** | Depends on Jira integration, which does not exist; no approval endpoint exists either |
+| Frontend integration | **Partially implemented** | `frontend/` (React + Vite): `POST /api/analyse`, the full coaching loop (`/start`, `/message`, `/reanalyze`, `/next`, `/finalize`), and now the Jira connect/project/issue flow (`/api/jira/*`, `frontend/src/components/jira/JiraImportFlow.tsx`) are wired to real backend calls. No approval/update flow, no persistence across page refresh (coaching state and Jira connection are both React/backend-in-memory only). |
+| Jira integration | **Implemented** — OAuth (3LO) + read APIs, in-memory connection | `app/jira/`, `tests/test_jira.py`, frontend `JiraImportFlow` (see §12). Read-only (`read:jira-work offline_access`); connection storage is explicitly temporary scaffolding (§8); no write/update endpoint. |
+| RAG | **Implemented** — standalone module + evaluation-scoped prompt integration | `app/rag/`, `app/agent/rag_integration.py`, `tests/test_rag.py`, `tests/test_rag_integration.py` — ingestion, embedding, retrieval, and now analysis/coaching-finalize prompt integration are all implemented and tested. Uses a **temporary hardcoded `project_id="default"`** (see §11) — no API router, no real `project_id` on tickets/sessions. Jira integration (§12) does not yet feed a real `project_id` into this - that wiring is still future work. |
+| Jira update | **Not implemented** | Explicitly out of scope for this slice (CLAUDE.md §17: no auto-update without explicit approval, which does not exist yet) |
 | Deployment | **Not implemented** | No Dockerfile, no CI config, no Render/Vercel deployment config found in the repository |
 
-Everything under `analysis/`, `coaching/`, and `rag/` (including its
-`app/agent/rag_integration.py` glue) is complete and tested for its
-currently defined scope. RAG's scope is deliberately narrower than the
-other two in one specific way: it evaluates against a single, explicitly
+Everything under `analysis/`, `coaching/`, `rag/` (including its
+`app/agent/rag_integration.py` glue), and `jira/` is complete and tested
+for its currently defined scope. RAG's scope is deliberately narrower than
+the others in one specific way: it evaluates against a single, explicitly
 temporary `project_id="default"` rather than real per-project context —
 that narrower scope is itself fully implemented, not partially built.
-Everything else (`auth/`, `database/`, `jira/`, `tickets/`) is an untouched
-empty stub.
+Jira's scope is narrower in a different way: read-only, single in-memory
+connection, no write/update endpoint (see §12). Everything else (`auth/`,
+`database/`, `tickets/`) is an untouched empty stub.
 
 ## 11. RAG module (Phase 3: standalone module + evaluation-scoped prompt integration)
 
@@ -529,3 +563,206 @@ If `OPENAI_API_KEY` is not configured, the script prints a warning and
 still runs (seeding fails safely per-document, retrieval fails safe on
 both runs) — the two runs will be identical in that case, which the
 warning explains rather than leaving unexplained.
+
+## 12. Jira module (OAuth 2.0 3LO + read APIs)
+
+`app/jira/` connects the app to a real Jira Cloud site: OAuth login,
+listing projects/issues, fetching one issue's full detail plus its
+Jira-confirmed relationships, and handing the selected issue into the
+**unmodified** analysis/coaching pipeline via `TicketInput`. It does not
+write to Jira and does not implement the deferred approval/update feature
+(CLAUDE.md §17).
+
+### OAuth flow
+
+```
+Frontend "Connect Jira" button
+        ↓ (full-page navigation, not fetch - OAuth needs a real browser redirect)
+GET /jira/authorize                              app/jira/router.py (oauth_router)
+        ↓
+store.create_pending_state()                     app/jira/store.py - CSRF state, 10-min TTL
+        ↓
+oauth.build_authorize_url(state)                  app/jira/oauth.py
+        ↓
+302 → https://auth.atlassian.com/authorize (audience, client_id, scope,
+                                              redirect_uri, state, response_type=code)
+        ↓ user logs in / grants consent on Atlassian's own site
+Atlassian redirects to JIRA_REDIRECT_URI (must exactly match the
+                                            Atlassian Developer Console registration)
+        ↓
+GET /jira/callback?code=...&state=...             app/jira/router.py (oauth_router)
+        ↓
+store.validate_and_consume_state(state)            raises InvalidOAuthStateError -> 400
+        ↓
+oauth.exchange_code_for_tokens(code)                POST auth.atlassian.com/oauth/token,
+                                                      then GET .../accessible-resources for cloud_id
+                                                      raises JiraOAuthError -> 502
+        ↓
+store.save_connection(connection)                   app/jira/store.py
+        ↓
+302 → settings.frontend_url                         frontend re-checks /api/jira/status
+```
+
+`GET /jira/authorize` and `GET /jira/callback` are included in
+`app/main.py` under `prefix="/jira"` (not `/api`), specifically because
+`JIRA_REDIRECT_URI` (`http://localhost:8000/jira/callback` by default)
+must match the callback path exactly, and that value is fixed by whatever
+is registered in the Atlassian Developer Console - it cannot share the
+`/api` prefix every other route in this app uses. The Jira *data* endpoints
+(`/api/jira/*`) use a second `APIRouter` (`router`, distinct from
+`oauth_router`) included under the normal `/api` prefix.
+
+### Read APIs and token refresh
+
+```
+GET /api/jira/status                    -> {connected: store.is_connected()}
+GET /api/jira/projects                  -> client.list_projects()
+GET /api/jira/projects/{id}/issues      -> client.list_issues(project_id)   (JQL: project = "{id}")
+GET /api/jira/issues/{key}              -> client.get_issue(key)
+GET /api/jira/issues/{key}/links        -> client.get_issue_links(key)      (= get_issue(key).links)
+```
+
+`list_issues()` calls Jira's `GET /rest/api/3/search/jql`, not the older
+`GET/POST /rest/api/3/search` - Atlassian removed the latter (410 Gone) as
+part of its enhanced-JQL-search migration
+([CHANGE-2046](https://developer.atlassian.com/changelog/#CHANGE-2046)).
+The per-issue response shape (`issue.key`, `issue.fields.summary`, etc.) is
+unchanged between the two endpoints, so `list_issues()`'s parsing logic
+didn't need to change - only the path. Two behavioral differences from the
+old endpoint that don't currently matter here: `fields` now defaults to
+`id` only (this call already passed `fields` explicitly, so unaffected),
+and pagination is `nextPageToken`-based rather than `startAt`/`total`-based
+(this call only ever fetches one page via `maxResults=50` with no
+pagination loop, so unaffected either way).
+
+Every `client.py` call goes through `get_valid_connection()` first, which
+transparently refreshes an expired access token
+(`oauth.refresh_access_token()`, keeping the existing `cloud_id` rather
+than re-fetching it) and persists the refreshed connection back to the
+store before making the actual Jira REST call. `store.JiraNotConnectedError`
+maps to `401`; `client.JiraAPIError`/`oauth.JiraOAuthError` map to `502` -
+unlike RAG's fail-safe-to-empty pattern, a Jira read has no sensible
+"degrade gracefully" behavior, so these are real errors surfaced to the
+caller (see §9).
+
+`app/jira/oauth.py` and `app/jira/client.py` use bare module-level
+`httpx.get`/`httpx.post` calls rather than a persistent `httpx.Client`
+singleton (unlike `app/agent/llm.py::get_client()` or
+`app/rag/embeddings.py::get_embedding_client()`) - those hold a *static*
+API key for the process lifetime, whereas the Jira bearer token changes
+over time via refresh, so there is nothing worth caching in a long-lived
+client.
+
+### Parsing raw Jira data: `app/jira/parsing.py`
+
+Two pure functions, no I/O, tested directly against hand-built fixture
+dicts (same convention as `app/rag/chunking.py`):
+
+- `adf_to_plain_text(node)` - Jira Cloud API v3 returns issue `description`
+  as Atlassian Document Format (a rich-content JSON tree), not plain text.
+  This does a best-effort recursive walk, joining text nodes and inserting
+  a line break after each block-level node. Unknown ADF node types (tables,
+  panels, etc.) are walked into but not specially formatted, so it degrades
+  gracefully rather than raising.
+- `extract_related_issues(fields)` - reads only what Jira itself reports:
+  `issuelinks` (both `outwardIssue`/`inwardIssue` directions, using the
+  link type's own `outward`/`inward` label as the relationship string),
+  `parent`, and `subtasks`. Returns `RelatedIssue` objects (see below).
+  Never infers a relationship Jira doesn't report - see CLAUDE.md §13.
+
+### Confirmed relationships: `RelatedIssue` and `TicketInput.related_issues`
+
+```python
+# app/analysis/schemas.py - reused as-is by app/jira/schemas.py, not duplicated
+class RelatedIssue(BaseModel):
+    key: str
+    relationship: str   # e.g. "blocks", "is blocked by", "relates to", "parent", "subtask"
+    summary: str | None
+```
+
+`TicketInput` gained one new optional field:
+`related_issues: list[RelatedIssue] | None = None`. This is additive and
+backward-compatible - every pre-Jira caller (manual ticket entry, all
+existing tests) constructs `TicketInput` without it and behaves exactly as
+before. `JiraIssueDetail.links` (`app/jira/schemas.py`) uses the same
+`RelatedIssue` model rather than a separate near-duplicate shape.
+
+**Wired into the prompt, not just carried as data.** `build_user_prompt()`
+(`app/agent/prompts.py`) appends a "Related Jira issues (confirmed by
+Jira, not inferred)" section whenever `ticket.related_issues` is
+non-empty - the same optional/backward-compatible conditional-section
+pattern already used for `coaching_history` and RAG's `retrieved_context`
+(see §3, §11, and `docs/skills.md` §9). The system prompt's dependency
+guidance was also adjusted: it now tells Claude to treat a
+`related_issues`-sourced relationship as a **confirmed** dependency, not a
+possible one, while ticket-text-only dependencies (no Jira confirmation)
+remain "possible" exactly as before. This is the same distinction CLAUDE.md
+§13 draws between Jira-evidenced and LLM-inferred dependencies, now
+actually reaching the LLM. No output schema changed - `AnalysisContent`
+still only has `possible_dependencies`; a confirmed relationship shows up
+in Claude's *reasoning* (its prose findings), not as a new structured
+field, since restructuring the output schema was explicitly out of scope
+for this slice.
+
+Verified manually: with a fixture issue carrying a `blocks` relationship,
+Claude's real analysis output described that dependency as "confirmed as
+blocking" under its open-questions findings and left
+`possible_dependencies` empty for it - i.e. it did not re-file the
+Jira-confirmed relationship as merely possible.
+
+### Frontend: `frontend/src/components/jira/JiraImportFlow.tsx`
+
+A single component driving a local 3-step state machine (project list ->
+issue list -> issue detail), following the codebase's existing
+no-router, conditional-render convention (`ReviewTicketPage.tsx` already
+switches between its manual form and the analysis-result view the same
+way - see `docs/skills.md`). `ReviewTicketPage.tsx` gained a
+`source: 'manual' | 'jira'` toggle; selecting "Import from Jira" renders
+`JiraImportFlow` in place of the manual form. `JiraImportFlow`'s "Use This
+Ticket" button calls the *exact same* `mutation.mutate(ticket)` the manual
+form's submit handler calls - there is no parallel analysis/coaching
+implementation for Jira-sourced tickets.
+
+Four new React Query **read** hooks (`useJiraStatus`, `useJiraProjects`,
+`useJiraProjectIssues`, `useJiraIssue`) are the first `useQuery` usage in
+this codebase - every prior hook (`useAnalyseTicket`, `useStartCoaching`,
+`useSubmitCoachingAnswer`, `useFinalizeCoaching`) is a `useMutation`, since
+everything before this was a POST. `frontend/src/lib/api/client.ts` gained
+`apiGet<T>()`, sharing response/error handling with `apiPost` via a new
+private `handleResponse()` helper (both previously duplicated the same
+`!response.ok` handling inline).
+
+"Connect Jira" is a plain `window.location.href` navigation to
+`${API_BASE_URL}/jira/authorize`, not a `fetch` call - OAuth requires a
+real top-level browser redirect through Atlassian's own login/consent
+pages, which a same-origin JSON API call cannot do.
+
+### Not yet done, by design
+
+- No Jira issue update/write endpoint (CLAUDE.md §17: never auto-update
+  without explicit approval, which doesn't exist yet).
+- No real `project_id` wired into RAG (§11) - `app/jira/` and
+  `app/agent/rag_integration.py`'s `TEMP_EVAL_PROJECT_ID` are still
+  unconnected; a real Jira project selection does not yet replace the
+  temporary RAG scope.
+- No persistence or multi-user auth for the Jira connection (§8) -
+  single process-local connection, lost on restart.
+- No dependency **inference** beyond what Jira already reports explicitly
+  as a link/parent/subtask - CLAUDE.md §13's "possible dependency" LLM
+  inference from ticket text is unchanged and untouched by this module.
+
+### Tests: `tests/test_jira.py`
+
+Pure logic (`adf_to_plain_text`, `extract_related_issues`, the in-memory
+store's state-transition rules) is tested directly with hand-built
+fixtures, no network calls - same convention as
+`select_weakest_criterion`/`should_stop_coaching`. Real Atlassian/Jira
+HTTP calls cannot follow the project's "hit the real API, no mocking"
+convention (a live OAuth consent step needs a human in a browser and
+cannot run headlessly in CI), so `httpx.get`/`httpx.post` are monkeypatched
+at the module level instead - consistent with how the rest of the codebase
+already monkeypatches module-level functions directly rather than
+introducing a mocking library dependency. Endpoint tests use `TestClient`
+the same way `tests/test_coaching.py` does. The `related_issues` prompt-
+wiring tests mirror `tests/test_rag_integration.py`'s
+`build_user_prompt()` coverage.

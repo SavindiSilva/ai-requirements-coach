@@ -40,8 +40,10 @@ class Settings(BaseSettings):
     jira_client_id: str = ""
     jira_client_secret: str = ""
     jira_redirect_uri: str = "http://localhost:8000/jira/callback"
-    # Classic scopes recommended: read:jira-work write:jira-work
-    jira_scopes: str = "read:jira-work write:jira-work offline_access"
+    # Read-only + refresh for this slice - write:jira-work is intentionally
+    # excluded (least privilege) until the deferred update/approval feature
+    # is actually implemented. Add it back only when that feature ships.
+    jira_scopes: str = "read:jira-work offline_access"
 
     # --- Coaching loop tuning (matches locked spec) ---
     max_clarification_rounds: int = 5

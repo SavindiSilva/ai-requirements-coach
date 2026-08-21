@@ -58,8 +58,12 @@ from app.coaching.router import router as coaching_router
 
 app.include_router(coaching_router, prefix="/api", tags=["coaching"])
 
-# from app.jira.router import router as jira_router
+from app.jira.router import oauth_router as jira_oauth_router
+from app.jira.router import router as jira_router
+
+app.include_router(jira_oauth_router, prefix="/jira", tags=["jira-oauth"])
+app.include_router(jira_router, prefix="/api/jira", tags=["jira"])
+
 # from app.tickets.router import router as tickets_router
 #
-# app.include_router(jira_router, prefix="/jira", tags=["jira"])
 # app.include_router(tickets_router, prefix="/tickets", tags=["tickets"])

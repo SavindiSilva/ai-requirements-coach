@@ -3,10 +3,14 @@
 > This document captures conventions that are **already established** in the
 > codebase, so future work follows the same style instead of introducing
 > parallel patterns. It now includes RAG (Phase 3: the standalone module in
-> §8, and its prompt integration into analysis/coaching in §9), added once
-> implemented rather than planned in advance. It still does **not** cover
-> Jira, auth, or database patterns — none of those have been implemented
-> yet, so there is nothing real to document for them.
+> §8, and its prompt integration into analysis/coaching in §9) and, within
+> §9, how Jira's `related_issues` wiring followed that same pattern. The
+> Jira module's own patterns (OAuth 2.0 3LO, in-memory token storage, a
+> dynamic-credential HTTP client) are implemented in `app/jira/` and
+> described in `docs/architecture.md` §12, but are not yet written up here
+> as reusable conventions. This document still does **not** cover auth or
+> database patterns — neither has been implemented yet, so there is nothing
+> real to document for them.
 
 ## 1. Claude structured-output pattern
 
@@ -271,7 +275,24 @@ duplicating that flow description here.
 connecting RAG retrieval into the analysis/coaching prompts without being
 allowed to change existing behaviour when the capability is unavailable.
 Reuse this shape for the next optional external capability added to an
-existing pipeline (e.g. Jira context later).
+existing pipeline.
+
+**Follow-through: Jira's `related_issues` reused three of these rules
+directly** (see `docs/architecture.md` §12 for the full flow) — the
+optional-trailing-field-on-the-existing-schema approach
+(`TicketInput.related_issues: list[RelatedIssue] | None = None`, not a new
+required field or a parallel schema), the
+empty-input-reproduces-pre-integration-output rule
+(`if ticket.related_issues:` in `build_user_prompt()`, so every pre-Jira
+caller is byte-for-byte unaffected), and formatting the optional content
+inline at its one call site (no separate formatter module was needed here,
+since - unlike RAG chunks - there was only ever one place that needed to
+render `RelatedIssue` into prompt text). It deliberately did **not** reuse
+the "fail safe by construction" rule below: RAG failing degrades gracefully
+to no context, but a user-initiated Jira read has no sensible
+silent-failure mode, so `app/jira/router.py` surfaces real `401`/`502`
+errors instead of swallowing them - a different, equally valid answer to
+the same "optional capability" shape, not a departure from it.
 
 - **One glue module, not logic duplicated at each call site.** Both call
   sites (`retrieve_context_node` in `app/agent/graph.py`,

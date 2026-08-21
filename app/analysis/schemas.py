@@ -10,9 +10,27 @@ computed `overall_readiness`).
 from pydantic import BaseModel, Field
 
 
+class RelatedIssue(BaseModel):
+    """A Jira-confirmed relationship to another issue (link, parent, or subtask).
+
+    Distinct from `AnalysisContent.possible_dependencies`, which is only ever
+    LLM-inferred from ticket text and never confirmed. A `RelatedIssue` comes
+    directly from Jira's own relationship data (see CLAUDE.md section 13) -
+    it is never invented or inferred.
+    """
+
+    key: str = Field(..., min_length=1)
+    relationship: str = Field(..., min_length=1, description="e.g. 'blocks', 'is blocked by', 'relates to', 'parent', 'subtask'.")
+    summary: str | None = None
+
+
 class TicketInput(BaseModel):
     title: str = Field(..., min_length=1)
     description: str = Field(..., min_length=1)
+    related_issues: list[RelatedIssue] | None = Field(
+        default=None,
+        description="Optional Jira-confirmed relationships. None for tickets entered manually.",
+    )
 
 
 class CriterionScore(BaseModel):
