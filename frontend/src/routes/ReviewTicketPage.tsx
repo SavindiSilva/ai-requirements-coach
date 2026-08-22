@@ -43,10 +43,10 @@ export function ReviewTicketPage() {
     mutation.mutate(ticket);
   }
 
-  function handleReset() {
+  function handleReset(nextSource: TicketSource = 'manual') {
     mutation.reset();
     coachingMutation.reset();
-    setSource('manual');
+    setSource(nextSource);
     setTitle('');
     setDescription('');
     setFieldErrors({});
@@ -57,7 +57,13 @@ export function ReviewTicketPage() {
   }
 
   if (coachingMutation.isSuccess && submittedTicket) {
-    return <CoachingPage ticket={submittedTicket} coaching={coachingMutation.data} />;
+    return (
+      <CoachingPage
+        ticket={submittedTicket}
+        coaching={coachingMutation.data}
+        onBackToJira={() => handleReset('jira')}
+      />
+    );
   }
 
   if (mutation.isSuccess && submittedTicket) {
@@ -65,7 +71,7 @@ export function ReviewTicketPage() {
       <div className="mx-auto max-w-3xl px-6 py-10">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-2xl font-medium">Requirement Analysis</h1>
-          <Button variant="secondary" onClick={handleReset}>
+          <Button variant="secondary" onClick={() => handleReset()}>
             Review Another Ticket
           </Button>
         </div>

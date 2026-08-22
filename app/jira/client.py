@@ -22,8 +22,9 @@ import time
 import httpx
 
 from app.analysis.schemas import RelatedIssue
+from app.coaching.schemas import FinalRequirementContent
 from app.jira import oauth, store
-from app.jira.parsing import adf_to_plain_text, extract_related_issues
+from app.jira.parsing import adf_to_plain_text, extract_related_issues, format_final_requirement_text, plain_text_to_adf
 from app.jira.schemas import JiraIssueDetail, JiraIssueSummary, JiraProject
 from app.jira.state import JiraConnectionState
 
@@ -71,6 +72,25 @@ def _get(path: str, params: dict | None = None) -> dict:
     return response.json()
 
 
+def _put(path: str, json_body: dict) -> None:
+    connection = get_valid_connection()
+    url = f"{_base_url(connection['cloud_id'])}{path}"
+
+    try:
+        response = httpx.put(
+            url,
+            headers={
+                "Authorization": f"Bearer {connection['access_token']}",
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+            json=json_body,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise JiraAPIError(f"Jira API request to {path} failed: {exc}") from exc
+
+
 def list_projects() -> list[JiraProject]:
     data = _get("/project/search", params={"maxResults": 50})
     return [JiraProject(id=p["id"], key=p["key"], name=p["name"]) for p in data.get("values", [])]
@@ -115,3 +135,16 @@ def get_issue(issue_key: str) -> JiraIssueDetail:
 
 def get_issue_links(issue_key: str) -> list[RelatedIssue]:
     return get_issue(issue_key).links
+
+
+def update_issue(issue_key: str, final_requirement: FinalRequirementContent) -> None:
+    """Overwrite an issue's description with the finalized development-ready requirement.
+
+    MVP scope: description only - never touches custom fields, assignee,
+    priority, status, story points, or any other field. Callers are
+    responsible for only invoking this after explicit user approval
+    (CLAUDE.md section 17); this function itself performs the write
+    unconditionally once called.
+    """
+    description_adf = plain_text_to_adf(format_final_requirement_text(final_requirement))
+    _put(f"/issue/{issue_key}", {"fields": {"description": description_adf}})

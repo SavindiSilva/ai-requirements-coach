@@ -26,3 +26,8 @@ export interface JiraIssueDetail extends JiraIssueSummary {
   description: string;
   links: RelatedIssue[];
 }
+
+export interface JiraUpdateResponse {
+  issue_key: string;
+  updated: boolean;
+}

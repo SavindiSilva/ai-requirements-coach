@@ -31,6 +31,10 @@ class TicketInput(BaseModel):
         default=None,
         description="Optional Jira-confirmed relationships. None for tickets entered manually.",
     )
+    source_issue_key: str | None = Field(
+        default=None,
+        description="The Jira issue key this ticket was imported from, if any. None for tickets entered manually. Lets /finalize know which Jira issue an approved update should write back to.",
+    )
 
 
 class CriterionScore(BaseModel):

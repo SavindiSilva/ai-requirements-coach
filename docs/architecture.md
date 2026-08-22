@@ -76,13 +76,14 @@ app/
 │   ├── chunking.py         pure word-based chunk_text()
 │   ├── embeddings.py       OpenAI embedding client wrapper, EmbeddingError
 │   └── store.py            ChromaDB PersistentClient, add_document(), retrieve(), RAGStoreError
-├── jira/                Jira OAuth 2.0 (3LO) + Jira Cloud REST API v3 reads
+├── jira/                Jira OAuth 2.0 (3LO) + Jira Cloud REST API v3 read/write
 │   ├── router.py          /jira/authorize, /jira/callback, /api/jira/* (two APIRouters)
 │   ├── oauth.py           Atlassian token exchange/refresh + accessible-resources lookup
-│   ├── client.py          authenticated Jira REST calls (projects/issues/issue detail)
-│   ├── parsing.py         pure: ADF→plain-text, issuelinks/parent/subtasks→RelatedIssue
+│   ├── client.py          authenticated Jira REST calls (projects/issues/issue detail/update)
+│   ├── parsing.py         pure: ADF↔plain-text both directions, issuelinks/parent/subtasks→RelatedIssue,
+│   │                       FinalRequirementContent→plain text for the update flow
 │   ├── store.py           TEMPORARY in-memory connection + OAuth CSRF-state store
-│   ├── schemas.py         JiraProject, JiraIssueSummary, JiraIssueDetail, JiraStatusResponse
+│   ├── schemas.py         JiraProject, JiraIssueSummary, JiraIssueDetail, JiraStatusResponse, JiraUpdateResponse
 │   └── state.py           JiraConnectionState TypedDict
 ├── auth/                empty (__init__.py only) — not started
 ├── database/            empty (__init__.py only) — not started
@@ -307,13 +308,13 @@ global, `get_graph()`).
 | GET | `/api/jira/projects/{project_id}/issues` | `app/jira/router.py` | List issues in a project |
 | GET | `/api/jira/issues/{issue_key}` | `app/jira/router.py` | Full issue detail, including related-issue links |
 | GET | `/api/jira/issues/{issue_key}/links` | `app/jira/router.py` | Just the related-issue links for an issue |
+| POST | `/api/jira/issues/{issue_key}/update` | `app/jira/router.py` | Overwrite an issue's description with the finalized requirement (description only - see §12) |
 
 Endpoints listed in CLAUDE.md §24 that **do not exist yet**: `GET
-/api/coaching/{session_id}`, `POST /api/requirements/{id}/approve`, and
-`POST /api/jira/issues/{issue_key}/update` (Jira writes are explicitly out
-of scope until the deferred approval feature exists). `app/main.py` has a
-commented-out placeholder import for a `tickets_router` that is not yet
-built.
+/api/coaching/{session_id}` and `POST /api/requirements/{id}/approve` -
+there is no separate persisted-approval endpoint (see §12 for how approval
+is enforced instead). `app/main.py` has a commented-out placeholder import
+for a `tickets_router` that is not yet built.
 
 ## 8. Current state/persistence approach
 
@@ -352,7 +353,7 @@ Settings actually defined today:
 | `anthropic_api_key`, `claude_model` | Yes | Used by `app/agent/llm.py::get_client()` |
 | `openai_api_key`, `embedding_model` | Yes | Used by `app/rag/embeddings.py::get_embedding_client()` — not yet used by anything outside `app/rag/` |
 | `chroma_persist_dir` | Yes | Used by `app/rag/store.py::get_chroma_client()` (`chromadb.PersistentClient(path=...)`) |
-| `jira_client_id`, `jira_client_secret`, `jira_redirect_uri`, `jira_scopes` | Yes | Used by `app/jira/oauth.py`; `jira_scopes` defaults to `"read:jira-work offline_access"` (no `write:jira-work` - least privilege until the deferred Jira-update feature exists) |
+| `jira_client_id`, `jira_client_secret`, `jira_redirect_uri`, `jira_scopes` | Yes | Used by `app/jira/oauth.py`; `jira_scopes` defaults to `"read:jira-work write:jira-work offline_access"` - `write:jira-work` was added for the issue-update flow (§12); a connection made before this change is read-only and must be reconnected (§8) to pick up the new scope |
 | `max_clarification_rounds` | Yes | Used by `stop_condition.py` and the analysis system prompt (caps question count) |
 | `readiness_pass_threshold` | Yes | Used by `stop_condition.py` (per-criterion stop bar, not `overall_readiness`) |
 
@@ -365,8 +366,9 @@ OpenAI/ChromaDB pair fails safe (see below); the Jira calls do **not** fail
 safe in the same way - `app/jira/router.py` translates
 `JiraNotConnectedError` to `401` and `JiraAPIError`/`JiraOAuthError` to
 `502`, since there is no "degrade gracefully" option for a user-initiated
-Jira read (unlike RAG, which is optional background context). Supabase/
-Postgres is still configured but not yet integrated or called anywhere.
+Jira read or write (unlike RAG, which is optional background context).
+Supabase/Postgres is still configured but not yet integrated or called
+anywhere.
 
 CORS is configured with a single allowed origin (`settings.frontend_url`),
 all methods and headers, credentials allowed.
@@ -378,10 +380,10 @@ all methods and headers, credentials allowed.
 | Core AI analysis | **Implemented** | `app/analysis/`, `app/agent/`, `POST /api/analyse`, `tests/test_analysis.py` |
 | Readiness scoring | **Implemented** | 4-criterion scoring + Python-computed `overall_readiness` in `app/agent/graph.py`; deterministic stop/gap logic in `app/coaching/stop_condition.py` |
 | Coaching | **Implemented** | Full start → message → reanalyze → next → finalize loop in `app/coaching/`, covered by `tests/test_coaching.py` |
-| Frontend integration | **Partially implemented** | `frontend/` (React + Vite): `POST /api/analyse`, the full coaching loop (`/start`, `/message`, `/reanalyze`, `/next`, `/finalize`), and now the Jira connect/project/issue flow (`/api/jira/*`, `frontend/src/components/jira/JiraImportFlow.tsx`) are wired to real backend calls. No approval/update flow, no persistence across page refresh (coaching state and Jira connection are both React/backend-in-memory only). |
-| Jira integration | **Implemented** — OAuth (3LO) + read APIs, in-memory connection | `app/jira/`, `tests/test_jira.py`, frontend `JiraImportFlow` (see §12). Read-only (`read:jira-work offline_access`); connection storage is explicitly temporary scaffolding (§8); no write/update endpoint. |
+| Frontend integration | **Partially implemented** | `frontend/` (React + Vite): `POST /api/analyse`, the full coaching loop (`/start`, `/message`, `/reanalyze`, `/next`, `/finalize`), the Jira connect/project/issue flow, and now the "Approve & Update Jira" action on the finalized-requirement view are wired to real backend calls. No persistence across page refresh (coaching state and Jira connection are both React/backend-in-memory only). |
+| Jira integration | **Implemented** — OAuth (3LO) + read APIs, in-memory connection | `app/jira/`, `tests/test_jira.py`, frontend `JiraImportFlow` (see §12). `read:jira-work write:jira-work offline_access`; connection storage is explicitly temporary scaffolding (§8). |
 | RAG | **Implemented** — standalone module + evaluation-scoped prompt integration | `app/rag/`, `app/agent/rag_integration.py`, `tests/test_rag.py`, `tests/test_rag_integration.py` — ingestion, embedding, retrieval, and now analysis/coaching-finalize prompt integration are all implemented and tested. Uses a **temporary hardcoded `project_id="default"`** (see §11) — no API router, no real `project_id` on tickets/sessions. Jira integration (§12) does not yet feed a real `project_id` into this - that wiring is still future work. |
-| Jira update | **Not implemented** | Explicitly out of scope for this slice (CLAUDE.md §17: no auto-update without explicit approval, which does not exist yet) |
+| Jira update | **Implemented** — description only, explicit user confirmation required | `POST /api/jira/issues/{issue_key}/update` (`app/jira/router.py`), `app/jira/client.py::update_issue()`, frontend confirm step in `FinalRequirementView.tsx` (see §12). No custom fields, assignee, priority, status, or story points are touched. No separate persisted-approval endpoint (CLAUDE.md §24's `POST /api/requirements/{id}/approve`) - the confirm step itself is the approval gate. |
 | Deployment | **Not implemented** | No Dockerfile, no CI config, no Render/Vercel deployment config found in the repository |
 
 Everything under `analysis/`, `coaching/`, `rag/` (including its
@@ -564,14 +566,18 @@ still runs (seeding fails safely per-document, retrieval fails safe on
 both runs) — the two runs will be identical in that case, which the
 warning explains rather than leaving unexplained.
 
-## 12. Jira module (OAuth 2.0 3LO + read APIs)
+## 12. Jira module (OAuth 2.0 3LO + read/write APIs)
 
 `app/jira/` connects the app to a real Jira Cloud site: OAuth login,
 listing projects/issues, fetching one issue's full detail plus its
-Jira-confirmed relationships, and handing the selected issue into the
-**unmodified** analysis/coaching pipeline via `TicketInput`. It does not
-write to Jira and does not implement the deferred approval/update feature
-(CLAUDE.md §17).
+Jira-confirmed relationships, handing the selected issue into the
+**unmodified** analysis/coaching pipeline via `TicketInput`, and - once a
+requirement has been finalized and the user explicitly approves -
+overwriting that issue's description with the finalized requirement (see
+"Approving and writing back to Jira" below). No other Jira write ever
+happens: no status transitions, no field beyond `description`, and CLAUDE.md
+§17's separate persisted-approval step is intentionally not implemented
+(see below for why).
 
 ### OAuth flow
 
@@ -737,10 +743,86 @@ private `handleResponse()` helper (both previously duplicated the same
 real top-level browser redirect through Atlassian's own login/consent
 pages, which a same-origin JSON API call cannot do.
 
+### Approving and writing back to Jira
+
+Once a session's finalized requirement carries a `source_issue_key`
+(traced below), the frontend offers an "Approve & Update Jira" action.
+CLAUDE.md §17 requires explicit user approval before any Jira write; this
+implementation enforces that as a two-click, in-UI confirm step
+(`FinalRequirementView.tsx`'s `showConfirm` state - click "Approve &
+Update Jira", read the confirmation text naming the exact issue that will
+be overwritten, click "Confirm & Update Jira") rather than a separate
+persisted-approval endpoint (`POST /api/requirements/{id}/approve` from
+CLAUDE.md §24 does not exist and isn't needed for this MVP - see §10).
+Nothing writes to Jira until that second click fires the mutation; the
+backend endpoint itself performs the write unconditionally once called; it
+does not re-enforce confirmation server-side, that's a frontend-owned gate.
+
+```
+TicketInput.source_issue_key                    app/analysis/schemas.py
+  — set by JiraImportFlow.tsx's "Use This Ticket" (= the selected issue's
+    key), None for manually-entered tickets. Threaded through
+    CoachingSessionState.ticket unchanged (no coaching/state.py change
+    needed - the field just rides along inside TicketInput).
+        ↓
+FinalRequirementView.tsx reads ticket.source_issue_key
+  — the "Approve & Update Jira" card renders only when this is present
+    (CLAUDE.md/requirement: manually-entered tickets keep working, with no
+    Jira UI at all)
+        ↓
+[user clicks Approve & Update Jira, then confirms]
+        ↓
+useUpdateJiraIssue() -> updateJiraIssue(issueKey, finalRequirement)  frontend/src/lib/api/jira.ts
+        ↓
+POST /api/jira/issues/{issue_key}/update  {user_story, acceptance_criteria,
+                                            scope, assumptions, dependencies}
+                                            app/jira/router.py
+        ↓
+client.update_issue(issue_key, final_requirement)   app/jira/client.py
+  — description only: builds {"fields": {"description": <ADF>}} and PUTs
+    it. Never includes any other field (no custom fields, assignee,
+    priority, status, story points - CLAUDE.md/requirement).
+        ↓
+parsing.format_final_requirement_text(final_requirement)  app/jira/parsing.py
+  — plain text: "User Story:\n\n...\n\nAcceptance Criteria:\n\n- ...\n\n..."
+    for all five sections (user story, acceptance criteria, scope,
+    assumptions, dependencies) - the full requirement, not a summary
+        ↓
+parsing.plain_text_to_adf(text)                    app/jira/parsing.py
+  — the inverse of adf_to_plain_text(): blank-line-separated blocks each
+    become one ADF node - an all-"- "-prefixed block becomes a bulletList,
+    anything else becomes one paragraph per line. Minimal by design, not a
+    general Markdown-to-ADF converter.
+        ↓
+PUT https://api.atlassian.com/ex/jira/{cloud_id}/rest/api/3/issue/{issue_key}
+  {"fields": {"description": <ADF doc>}}             client.py::_put()
+  — 204/200 on success, no body expected; JiraAPIError on failure -> 502
+        ↓
+Frontend success state: confirmation text naming the updated issue, and a
+"Back to Issue List" button (calls the onBackToJira callback threaded
+CoachingPage -> ReviewTicketPage, which resets straight back into the Jira
+import flow rather than the manual-entry screen - see the callback-driven
+reset in ReviewTicketPage.tsx's handleReset(nextSource))
+```
+
+`FinalRequirementContent` (`app/coaching/schemas.py`) is reused as-is for
+the update request body - `app/jira/client.py` and `app/jira/parsing.py`
+import it directly from `app.coaching.schemas` rather than duplicating an
+equivalent shape in `app/jira/schemas.py`. This introduces a new `jira ->
+coaching` import direction that didn't exist before this change; it's a
+one-way "sink" dependency (`coaching/` still imports nothing from
+`jira/`), not a cycle.
+
+**Scope change: `write:jira-work` added.** `settings.jira_scopes` is now
+`"read:jira-work write:jira-work offline_access"` (§9) - a direct reversal
+of the previous slice's explicit least-privilege exclusion of write
+access. **Any connection made before this change is read-only and will be
+rejected by Jira on an update attempt; the user must reconnect (re-run the
+`/jira/authorize` flow) to get a token with the new scope** - there is no
+in-app detection or prompt for this yet (see "Not yet done" below).
+
 ### Not yet done, by design
 
-- No Jira issue update/write endpoint (CLAUDE.md §17: never auto-update
-  without explicit approval, which doesn't exist yet).
 - No real `project_id` wired into RAG (§11) - `app/jira/` and
   `app/agent/rag_integration.py`'s `TEMP_EVAL_PROJECT_ID` are still
   unconnected; a real Jira project selection does not yet replace the
@@ -750,10 +832,18 @@ pages, which a same-origin JSON API call cannot do.
 - No dependency **inference** beyond what Jira already reports explicitly
   as a link/parent/subtask - CLAUDE.md §13's "possible dependency" LLM
   inference from ticket text is unchanged and untouched by this module.
+- No detection of a stale (read-only) connection after the `write:jira-work`
+  scope change - an update attempt with an old token surfaces as a normal
+  `502` from Jira, not a specific "please reconnect" message.
+- No Jira fields beyond `description` are ever written - no custom fields,
+  assignee, priority, status transitions, or story points, and no plan to
+  add them without a specific requirement (CLAUDE.md §17/§24 don't call for
+  more than this).
 
 ### Tests: `tests/test_jira.py`
 
-Pure logic (`adf_to_plain_text`, `extract_related_issues`, the in-memory
+Pure logic (`adf_to_plain_text`, `extract_related_issues`,
+`format_final_requirement_text`, `plain_text_to_adf`, the in-memory
 store's state-transition rules) is tested directly with hand-built
 fixtures, no network calls - same convention as
 `select_weakest_criterion`/`should_stop_coaching`. Real Atlassian/Jira

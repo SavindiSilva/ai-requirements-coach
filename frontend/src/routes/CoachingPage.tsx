@@ -14,6 +14,7 @@ import type { TicketInput } from '../lib/types/analysis';
 interface CoachingPageProps {
   ticket: TicketInput;
   coaching: CoachingStartResponse;
+  onBackToJira: () => void;
 }
 
 interface SessionState {
@@ -39,7 +40,7 @@ const STOP_REASON_LABELS: Record<string, string> = {
   readiness_threshold_met: 'Readiness threshold met — this ticket is sufficiently clear.',
 };
 
-export function CoachingPage({ ticket, coaching }: CoachingPageProps) {
+export function CoachingPage({ ticket, coaching, onBackToJira }: CoachingPageProps) {
   const [session, setSession] = useState<SessionState>(() => ({
     question: coaching.question,
     why: coaching.why,
@@ -116,7 +117,11 @@ export function CoachingPage({ ticket, coaching }: CoachingPageProps) {
 
         <div className="flex flex-col gap-4">
           {finalizeMutation.isSuccess ? (
-            <FinalRequirementView result={finalizeMutation.data} />
+            <FinalRequirementView
+              result={finalizeMutation.data}
+              ticket={ticket}
+              onBackToJira={onBackToJira}
+            />
           ) : session.isComplete ? (
             <>
               <Card className="p-5">

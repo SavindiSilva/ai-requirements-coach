@@ -11,7 +11,14 @@ from pydantic import BaseModel, Field
 
 from app.analysis.schemas import RelatedIssue
 
-__all__ = ["RelatedIssue", "JiraStatusResponse", "JiraProject", "JiraIssueSummary", "JiraIssueDetail"]
+__all__ = [
+    "RelatedIssue",
+    "JiraStatusResponse",
+    "JiraProject",
+    "JiraIssueSummary",
+    "JiraIssueDetail",
+    "JiraUpdateResponse",
+]
 
 
 class JiraStatusResponse(BaseModel):
@@ -34,3 +41,8 @@ class JiraIssueSummary(BaseModel):
 class JiraIssueDetail(JiraIssueSummary):
     description: str
     links: list[RelatedIssue] = Field(default_factory=list)
+
+
+class JiraUpdateResponse(BaseModel):
+    issue_key: str
+    updated: bool = True

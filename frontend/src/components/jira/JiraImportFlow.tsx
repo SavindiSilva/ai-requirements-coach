@@ -42,6 +42,7 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
       title: issue.summary,
       description: issue.description,
       related_issues: issue.links.length > 0 ? issue.links : undefined,
+      source_issue_key: issue.key,
     });
   }
 

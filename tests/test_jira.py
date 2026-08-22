@@ -14,6 +14,7 @@ Follows the existing test conventions (docs/skills.md section 6):
   rather than introducing a new mocking library/dependency.
 """
 
+import json as json_module
 import time
 
 import httpx
@@ -21,10 +22,16 @@ import pytest
 
 from app.agent.prompts import build_user_prompt
 from app.analysis.schemas import RelatedIssue, TicketInput
+from app.coaching.schemas import FinalRequirementContent
 from app.jira import client, oauth, store
 from app.jira.client import JiraAPIError
 from app.jira.oauth import JiraOAuthError
-from app.jira.parsing import adf_to_plain_text, extract_related_issues
+from app.jira.parsing import (
+    adf_to_plain_text,
+    extract_related_issues,
+    format_final_requirement_text,
+    plain_text_to_adf,
+)
 from app.jira.schemas import JiraProject
 from app.jira.state import JiraConnectionState
 from app.jira.store import InvalidOAuthStateError, JiraNotConnectedError
@@ -663,6 +670,227 @@ def test_jira_issue_not_connected_returns_401():
 def test_jira_issue_links_not_connected_returns_401():
     response = client_app.get("/api/jira/issues/PROJ-1/links")
     assert response.status_code == 401
+
+
+# --- app/jira/parsing.py: format_final_requirement_text -----------------------
+
+
+def _make_final_requirement(
+    user_story: str = "As a user, I want X so that Y.",
+    acceptance_criteria: list[str] | None = None,
+    scope: list[str] | None = None,
+    assumptions: list[str] | None = None,
+    dependencies: list[str] | None = None,
+) -> FinalRequirementContent:
+    return FinalRequirementContent(
+        user_story=user_story,
+        acceptance_criteria=acceptance_criteria if acceptance_criteria is not None else ["Given A, when B, then C."],
+        scope=scope if scope is not None else ["In scope: X."],
+        assumptions=assumptions if assumptions is not None else ["Assumes Y exists."],
+        dependencies=dependencies if dependencies is not None else ["Depends on Z."],
+    )
+
+
+def test_format_final_requirement_text_includes_all_sections():
+    text = format_final_requirement_text(_make_final_requirement())
+
+    assert "User Story:" in text
+    assert "As a user, I want X so that Y." in text
+    assert "Acceptance Criteria:" in text
+    assert "- Given A, when B, then C." in text
+    assert "Scope:" in text
+    assert "- In scope: X." in text
+    assert "Assumptions:" in text
+    assert "- Assumes Y exists." in text
+    assert "Dependencies:" in text
+    assert "- Depends on Z." in text
+
+
+def test_format_final_requirement_text_empty_section_shows_none():
+    text = format_final_requirement_text(_make_final_requirement(dependencies=[]))
+    assert "Dependencies:\n\n(none)" in text
+
+
+def test_format_final_requirement_text_title_and_body_are_separate_blocks():
+    # plain_text_to_adf() relies on a blank line between a section's title
+    # and its body to render them as distinct ADF nodes.
+    text = format_final_requirement_text(_make_final_requirement())
+    assert "Acceptance Criteria:\n\n- Given A, when B, then C." in text
+
+
+# --- app/jira/parsing.py: plain_text_to_adf ------------------------------------
+
+
+def test_plain_text_to_adf_empty_string_returns_valid_empty_doc():
+    doc = plain_text_to_adf("")
+    assert doc["type"] == "doc"
+    assert doc["version"] == 1
+    assert doc["content"] == [{"type": "paragraph", "content": []}]
+
+
+def test_plain_text_to_adf_single_paragraph():
+    doc = plain_text_to_adf("Hello world.")
+    assert doc["content"] == [{"type": "paragraph", "content": [{"type": "text", "text": "Hello world."}]}]
+
+
+def test_plain_text_to_adf_bullet_block_becomes_bullet_list():
+    doc = plain_text_to_adf("- Item one\n- Item two")
+    assert doc["content"] == [
+        {
+            "type": "bulletList",
+            "content": [
+                {"type": "listItem", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Item one"}]}]},
+                {"type": "listItem", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Item two"}]}]},
+            ],
+        }
+    ]
+
+
+def test_plain_text_to_adf_title_then_bullets_are_separate_nodes():
+    doc = plain_text_to_adf("Acceptance Criteria:\n\n- Item one\n- Item two")
+    assert len(doc["content"]) == 2
+    assert doc["content"][0] == {"type": "paragraph", "content": [{"type": "text", "text": "Acceptance Criteria:"}]}
+    assert doc["content"][1]["type"] == "bulletList"
+
+
+def test_plain_text_to_adf_roundtrips_format_final_requirement_text():
+    # Integration-style check between the two pure functions: the combined
+    # output must always be valid, well-formed ADF - never raise, never
+    # produce an empty content list for non-empty input.
+    text = format_final_requirement_text(_make_final_requirement())
+    doc = plain_text_to_adf(text)
+    assert doc["type"] == "doc"
+    assert len(doc["content"]) > 0
+    node_types = {node["type"] for node in doc["content"]}
+    assert node_types <= {"paragraph", "bulletList"}
+
+
+# --- app/jira/client.py: update_issue ------------------------------------------
+
+
+def test_update_issue_sends_description_only(monkeypatch):
+    store.save_connection(_make_connection())
+    captured: dict = {}
+
+    def _fake_put(url, headers=None, json=None, **kwargs):
+        captured["url"] = url
+        captured["json"] = json
+        return httpx.Response(204, request=httpx.Request("PUT", url))
+
+    monkeypatch.setattr(client.httpx, "put", _fake_put)
+
+    client.update_issue("PROJ-1", _make_final_requirement())
+
+    assert captured["url"].endswith("/issue/PROJ-1")
+    # MVP scope: description is the only field ever sent.
+    assert set(captured["json"]["fields"].keys()) == {"description"}
+    assert captured["json"]["fields"]["description"]["type"] == "doc"
+
+
+def test_update_issue_includes_all_requirement_sections_in_description(monkeypatch):
+    store.save_connection(_make_connection())
+    captured: dict = {}
+
+    def _fake_put(url, headers=None, json=None, **kwargs):
+        captured["json"] = json
+        return httpx.Response(204, request=httpx.Request("PUT", url))
+
+    monkeypatch.setattr(client.httpx, "put", _fake_put)
+
+    client.update_issue("PROJ-1", _make_final_requirement(user_story="As a manager, I want CSV export."))
+
+    adf_text = json_module.dumps(captured["json"]["fields"]["description"])
+    assert "As a manager, I want CSV export." in adf_text
+    assert "Given A, when B, then C." in adf_text
+    assert "In scope: X." in adf_text
+    assert "Assumes Y exists." in adf_text
+    assert "Depends on Z." in adf_text
+
+
+def test_update_issue_not_connected_raises_without_http_call(monkeypatch):
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("httpx.put must not be called when Jira is not connected")
+
+    monkeypatch.setattr(client.httpx, "put", _fail_if_called)
+
+    with pytest.raises(JiraNotConnectedError):
+        client.update_issue("PROJ-1", _make_final_requirement())
+
+
+def test_update_issue_http_failure_raises_jira_api_error(monkeypatch):
+    store.save_connection(_make_connection())
+
+    def _fake_put(url, headers=None, json=None, **kwargs):
+        return httpx.Response(400, json={"errorMessages": ["bad request"]}, request=httpx.Request("PUT", url))
+
+    monkeypatch.setattr(client.httpx, "put", _fake_put)
+
+    with pytest.raises(JiraAPIError):
+        client.update_issue("PROJ-1", _make_final_requirement())
+
+
+# --- app/jira/router.py: POST /api/jira/issues/{issue_key}/update -------------
+
+
+def test_jira_update_issue_not_connected_returns_401():
+    response = client_app.post(
+        "/api/jira/issues/PROJ-1/update", json=_make_final_requirement().model_dump()
+    )
+    assert response.status_code == 401
+
+
+def test_jira_update_issue_success(monkeypatch):
+    store.save_connection(_make_connection())
+    captured: dict = {}
+
+    def _fake_update_issue(issue_key, final_requirement):
+        captured["issue_key"] = issue_key
+        captured["final_requirement"] = final_requirement
+
+    monkeypatch.setattr("app.jira.router.client.update_issue", _fake_update_issue)
+
+    response = client_app.post(
+        "/api/jira/issues/PROJ-1/update", json=_make_final_requirement().model_dump()
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"issue_key": "PROJ-1", "updated": True}
+    assert captured["issue_key"] == "PROJ-1"
+    assert captured["final_requirement"] == _make_final_requirement()
+
+
+def test_jira_update_issue_api_failure_returns_502(monkeypatch):
+    store.save_connection(_make_connection())
+
+    def _raise(issue_key, final_requirement):
+        raise JiraAPIError("upstream failure")
+
+    monkeypatch.setattr("app.jira.router.client.update_issue", _raise)
+
+    response = client_app.post(
+        "/api/jira/issues/PROJ-1/update", json=_make_final_requirement().model_dump()
+    )
+    assert response.status_code == 502
+
+
+def test_jira_update_issue_rejects_missing_body():
+    store.save_connection(_make_connection())
+    response = client_app.post("/api/jira/issues/PROJ-1/update", json={})
+    assert response.status_code == 422
+
+
+# --- app/analysis/schemas.py: TicketInput.source_issue_key --------------------
+
+
+def test_ticket_input_source_issue_key_defaults_to_none():
+    ticket = TicketInput(title="T", description="D")
+    assert ticket.source_issue_key is None
+
+
+def test_ticket_input_source_issue_key_roundtrips():
+    ticket = TicketInput(title="T", description="D", source_issue_key="PROJ-1")
+    assert ticket.source_issue_key == "PROJ-1"
+    assert ticket.model_dump()["source_issue_key"] == "PROJ-1"
 
 
 # --- app/agent/prompts.py: related_issues wiring ------------------------------

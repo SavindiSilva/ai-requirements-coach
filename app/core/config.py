@@ -40,10 +40,11 @@ class Settings(BaseSettings):
     jira_client_id: str = ""
     jira_client_secret: str = ""
     jira_redirect_uri: str = "http://localhost:8000/jira/callback"
-    # Read-only + refresh for this slice - write:jira-work is intentionally
-    # excluded (least privilege) until the deferred update/approval feature
-    # is actually implemented. Add it back only when that feature ships.
-    jira_scopes: str = "read:jira-work offline_access"
+    # write:jira-work is required for the explicit-approval Jira update flow
+    # (app/jira/client.py::update_issue) - CLAUDE.md section 17 requires
+    # explicit user approval before any write, enforced at the UI/endpoint
+    # level (never automatic), not by withholding the scope.
+    jira_scopes: str = "read:jira-work write:jira-work offline_access"
 
     # --- Coaching loop tuning (matches locked spec) ---
     max_clarification_rounds: int = 5

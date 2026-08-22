@@ -6,23 +6,34 @@ different conventions:
   exactly match settings.jira_redirect_uri as registered in the Atlassian
   Developer Console, so it cannot live under the /api prefix every other
   route in this app uses.
-- `router`: /api/jira/* - Jira application-data reads, following the same
-  /api prefix convention as app/analysis/router.py and app/coaching/router.py.
+- `router`: /api/jira/* - Jira application-data reads and the one write
+  endpoint (issue update), following the same /api prefix convention as
+  app/analysis/router.py and app/coaching/router.py.
 
-Do not implement issue-update/write endpoints here - out of scope for this
-slice (CLAUDE.md section 17: never auto-update Jira without explicit user
-approval, which does not exist yet).
+The update endpoint never fires automatically - it only runs when the
+frontend calls it, which only happens after the user explicitly confirms
+an "Approve & Update Jira" action (CLAUDE.md section 17). This router does
+not itself enforce that confirmation (that's a frontend UX concern); it
+enforces only that description is the sole field touched (see
+app/jira/client.py::update_issue).
 """
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import RedirectResponse
 
 from app.analysis.schemas import RelatedIssue
+from app.coaching.schemas import FinalRequirementContent
 from app.core.config import settings
 from app.jira import client, oauth, store
 from app.jira.client import JiraAPIError
 from app.jira.oauth import JiraOAuthError
-from app.jira.schemas import JiraIssueDetail, JiraIssueSummary, JiraProject, JiraStatusResponse
+from app.jira.schemas import (
+    JiraIssueDetail,
+    JiraIssueSummary,
+    JiraProject,
+    JiraStatusResponse,
+    JiraUpdateResponse,
+)
 from app.jira.store import InvalidOAuthStateError, JiraNotConnectedError
 
 oauth_router = APIRouter()
@@ -101,3 +112,15 @@ def jira_issue_links(issue_key: str) -> list[RelatedIssue]:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except JiraAPIError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.post("/issues/{issue_key}/update", response_model=JiraUpdateResponse)
+def jira_update_issue(issue_key: str, final_requirement: FinalRequirementContent) -> JiraUpdateResponse:
+    try:
+        client.update_issue(issue_key, final_requirement)
+    except JiraNotConnectedError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except JiraAPIError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return JiraUpdateResponse(issue_key=issue_key, updated=True)

@@ -1,4 +1,7 @@
-"""Pure parsing helpers for raw Jira Cloud REST API v3 response data.
+"""Pure parsing/formatting helpers for Jira Cloud REST API v3 data - both
+directions: reading raw Jira responses (adf_to_plain_text,
+extract_related_issues), and writing back (format_final_requirement_text,
+plain_text_to_adf).
 
 No I/O here - same "pure and side-effect free by design" convention as
 app/rag/chunking.py and app/coaching/selection.py, so this can be unit
@@ -6,6 +9,7 @@ tested directly against hand-built fixture dicts with no HTTP mocking.
 """
 
 from app.analysis.schemas import RelatedIssue
+from app.coaching.schemas import FinalRequirementContent
 
 _BLOCK_NODE_TYPES = {"paragraph", "heading", "listItem"}
 
@@ -91,3 +95,73 @@ def extract_related_issues(fields: dict) -> list[RelatedIssue]:
         )
 
     return related
+
+
+def format_final_requirement_text(final_requirement: FinalRequirementContent) -> str:
+    """Format a finalized development-ready requirement as plain text for a Jira description.
+
+    Includes every section - user story, acceptance criteria, scope,
+    assumptions, dependencies - per the requirement that the full refined
+    requirement (not a partial summary) is written back to Jira. Each
+    section's title and body are separated by a blank line so
+    plain_text_to_adf() renders the body (a bullet list, or the user story
+    paragraph) as its own ADF node distinct from the title.
+    """
+
+    def _section(title: str, items: list[str]) -> str:
+        body = "\n".join(f"- {item}" for item in items) if items else "(none)"
+        return f"{title}:\n\n{body}"
+
+    return "\n\n".join(
+        [
+            f"User Story:\n\n{final_requirement.user_story}",
+            _section("Acceptance Criteria", final_requirement.acceptance_criteria),
+            _section("Scope", final_requirement.scope),
+            _section("Assumptions", final_requirement.assumptions),
+            _section("Dependencies", final_requirement.dependencies),
+        ]
+    )
+
+
+def plain_text_to_adf(text: str) -> dict:
+    """Convert plain text into a minimal Atlassian Document Format document.
+
+    The inverse of adf_to_plain_text() for the one direction this app
+    writes back to Jira. Blocks separated by a blank line become their own
+    ADF node: a block whose every line starts with "- " becomes an ADF
+    bulletList; any other block becomes one paragraph per line. This is
+    intentionally minimal - just enough structure for
+    format_final_requirement_text()'s output to render legibly in Jira, not
+    a general-purpose Markdown-to-ADF converter.
+    """
+    content: list[dict] = []
+
+    for block in text.split("\n\n"):
+        lines = [line for line in block.split("\n") if line.strip()]
+        if not lines:
+            continue
+
+        bullet_items = [line[2:] for line in lines if line.startswith("- ")]
+        if bullet_items and len(bullet_items) == len(lines):
+            content.append(
+                {
+                    "type": "bulletList",
+                    "content": [
+                        {
+                            "type": "listItem",
+                            "content": [
+                                {"type": "paragraph", "content": [{"type": "text", "text": item}]}
+                            ],
+                        }
+                        for item in bullet_items
+                    ],
+                }
+            )
+        else:
+            for line in lines:
+                content.append({"type": "paragraph", "content": [{"type": "text", "text": line}]})
+
+    if not content:
+        content = [{"type": "paragraph", "content": []}]
+
+    return {"type": "doc", "version": 1, "content": content}
