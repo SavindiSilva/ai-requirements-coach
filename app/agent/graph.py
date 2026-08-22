@@ -17,7 +17,7 @@ from langgraph.graph import END, StateGraph
 
 from app.agent.llm import run_structured_analysis
 from app.agent.prompts import build_system_prompt, build_user_prompt
-from app.agent.rag_integration import get_retrieved_context
+from app.agent.rag_integration import TEMP_EVAL_PROJECT_ID, get_retrieved_context
 from app.agent.state import AgentState
 from app.analysis.schemas import AnalysisContent, AnalysisResult, TicketInput
 
@@ -35,7 +35,8 @@ def _compute_overall_readiness(content: AnalysisContent) -> float:
 def retrieve_context_node(state: AgentState) -> AgentState:
     ticket = state["ticket"]
     query_text = f"{ticket.title}\n{ticket.description}"
-    return {"retrieved_context": get_retrieved_context(query_text)}
+    project_id = ticket.project_id or TEMP_EVAL_PROJECT_ID
+    return {"retrieved_context": get_retrieved_context(query_text, project_id=project_id)}
 
 
 def analyze_requirement_node(state: AgentState) -> AgentState:

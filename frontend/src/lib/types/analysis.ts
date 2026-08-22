@@ -12,6 +12,7 @@ export interface TicketInput {
   description: string;
   related_issues?: RelatedIssue[] | null;
   source_issue_key?: string | null;
+  project_id?: string | null;
 }
 
 export interface CriterionScore {

@@ -382,7 +382,7 @@ all methods and headers, credentials allowed.
 | Coaching | **Implemented** | Full start → message → reanalyze → next → finalize loop in `app/coaching/`, covered by `tests/test_coaching.py` |
 | Frontend integration | **Partially implemented** | `frontend/` (React + Vite): `POST /api/analyse`, the full coaching loop (`/start`, `/message`, `/reanalyze`, `/next`, `/finalize`), the Jira connect/project/issue flow, and now the "Approve & Update Jira" action on the finalized-requirement view are wired to real backend calls. No persistence across page refresh (coaching state and Jira connection are both React/backend-in-memory only). |
 | Jira integration | **Implemented** — OAuth (3LO) + read APIs, in-memory connection | `app/jira/`, `tests/test_jira.py`, frontend `JiraImportFlow` (see §12). `read:jira-work write:jira-work offline_access`; connection storage is explicitly temporary scaffolding (§8). |
-| RAG | **Implemented** — standalone module + evaluation-scoped prompt integration | `app/rag/`, `app/agent/rag_integration.py`, `tests/test_rag.py`, `tests/test_rag_integration.py` — ingestion, embedding, retrieval, and now analysis/coaching-finalize prompt integration are all implemented and tested. Uses a **temporary hardcoded `project_id="default"`** (see §11) — no API router, no real `project_id` on tickets/sessions. Jira integration (§12) does not yet feed a real `project_id` into this - that wiring is still future work. |
+| RAG | **Implemented** — standalone module + API router + Jira-project-scoped prompt integration | `app/rag/`, `app/rag/router.py`, `app/agent/rag_integration.py`, `tests/test_rag.py`, `tests/test_rag_integration.py`, `tests/test_knowledge_upload.py`, `tests/test_knowledge_rag_e2e.py` — ingestion, embedding, retrieval, a knowledge-upload API router (`POST /api/knowledge/upload`), and analysis/coaching-finalize prompt integration are all implemented and tested. `TicketInput` now has a `project_id` field (see §11): for Jira-imported tickets it comes from the selected Jira project and is threaded into `retrieve_context_node`/`finalize_coaching_session`; **`TEMP_EVAL_PROJECT_ID = "default"`** remains only as the fallback for manually-entered tickets, which have no `project_id`. |
 | Jira update | **Implemented** — description only, explicit user confirmation required | `POST /api/jira/issues/{issue_key}/update` (`app/jira/router.py`), `app/jira/client.py::update_issue()`, frontend confirm step in `FinalRequirementView.tsx` (see §12). No custom fields, assignee, priority, status, or story points are touched. No separate persisted-approval endpoint (CLAUDE.md §24's `POST /api/requirements/{id}/approve`) - the confirm step itself is the approval gate. |
 | Deployment | **Not implemented** | No Dockerfile, no CI config, no Render/Vercel deployment config found in the repository |
 
@@ -400,7 +400,8 @@ connection, no write/update endpoint (see §12). Everything else (`auth/`,
 
 `app/rag/` is a self-contained subsystem for project-scoped document
 ingestion and semantic retrieval — unchanged from its first Phase 3 pass
-(see the ingestion/retrieval diagrams below). It still has no API router.
+(see the ingestion/retrieval diagrams below). It is now also exposed over
+HTTP via `app/rag/router.py` (`POST /api/knowledge/upload`).
 What's new in this pass is that `analysis/` and `coaching/` now call into
 it, through a dedicated glue module rather than directly.
 
@@ -458,9 +459,14 @@ Key implementation details:
 - No document-management layer exists (no update/delete, no listing) —
   only `add_document()` (create) and `retrieve()` (query), matching the
   "do not build a complicated document management system" constraint.
-- Not yet built, intentionally: an API router, and a real `project_id`
-  concept on `TicketInput` or `CoachingSessionState` (nothing upstream
-  currently produces a real one to pass in).
+- An API router now exists: `app/rag/router.py` (`POST /api/knowledge/upload`).
+- `TicketInput` now has a `project_id` field (`app/analysis/schemas.py`). For
+  Jira-imported tickets it's populated from the selected Jira project and
+  threaded into retrieval via `app/agent/graph.py::retrieve_context_node`
+  and `app/coaching/router.py::finalize_coaching_session` (coaching
+  sessions carry it via `session["ticket"].project_id` — no separate field
+  was added to `CoachingSessionState`). Manually-entered tickets have no
+  `project_id`, so retrieval falls back to `TEMP_EVAL_PROJECT_ID`.
 
 ### Prompt integration: `app/agent/rag_integration.py`
 

@@ -71,6 +71,25 @@ export async function apiPost<TResponse>(path: string, body: unknown): Promise<T
   return handleResponse<TResponse>(response);
 }
 
+export async function apiPostForm<TResponse>(path: string, formData: FormData): Promise<TResponse> {
+  let response: Response;
+  try {
+    // No Content-Type header here — the browser sets multipart/form-data
+    // with the correct boundary itself when the body is a FormData.
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'POST',
+      body: formData,
+    });
+  } catch {
+    throw new ApiError(
+      'Could not reach the server. Check that the backend is running.',
+      'network',
+    );
+  }
+
+  return handleResponse<TResponse>(response);
+}
+
 export async function apiGet<TResponse>(path: string): Promise<TResponse> {
   let response: Response;
   try {

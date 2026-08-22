@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
+import { KnowledgeContextPanel } from '../knowledge/KnowledgeContextPanel';
 import { useJiraStatus } from '../../hooks/useJiraStatus';
 import { useJiraProjects } from '../../hooks/useJiraProjects';
 import { useJiraProjectIssues } from '../../hooks/useJiraProjectIssues';
@@ -43,6 +44,7 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
       description: issue.description,
       related_issues: issue.links.length > 0 ? issue.links : undefined,
       source_issue_key: issue.key,
+      project_id: selectedProjectId,
     });
   }
 
@@ -129,6 +131,8 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
             </Card>
           ))}
         </div>
+
+        <KnowledgeContextPanel projectId={selectedProjectId} />
       </div>
     );
   }
@@ -181,6 +185,8 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
           <Button onClick={handleUseTicket}>Use This Ticket</Button>
         </Card>
       )}
+
+      <KnowledgeContextPanel projectId={selectedProjectId} />
     </div>
   );
 }

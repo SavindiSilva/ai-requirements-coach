@@ -279,13 +279,15 @@ This is temporary scaffolding, not a designed feature:
   extend this pattern elsewhere (no additional hardcoded project ids, no
   features built around `"default"` as if it were a real project).
 
-Not yet done, by design (see docs/architecture.md):
+Now implemented (see docs/architecture.md):
 
-- No API router for RAG
-- No `project_id` on `TicketInput` or coaching session state (still
-  resolved internally to the temporary constant)
-- No real multi-project selection — only the single `"default"` scope
-  exists
+- `POST /api/knowledge/upload` (`app/rag/router.py`) — a real API router for RAG document ingestion
+- `TicketInput` now has a `project_id` field (`app/analysis/schemas.py`). For Jira-imported
+  tickets, `project_id` comes from the selected Jira project and is threaded through to RAG
+  retrieval (`app/agent/graph.py::retrieve_context_node`,
+  `app/coaching/router.py::finalize_coaching_session`)
+- `TEMP_EVAL_PROJECT_ID` remains, but only as the fallback for manually-entered tickets, which
+  have no `project_id` — it is no longer the only path
 
 ## Current Priority
 
@@ -307,7 +309,10 @@ Do not rebuild the existing AI analysis, coaching, or RAG functionality unless a
 
 1. Frontend integration
 2. Jira integration
-3. Replace the temporary `project_id="default"` RAG scaffolding with real project context from Jira/frontend
+3. (Done, for Jira-imported tickets) Replace the temporary `project_id="default"` RAG scaffolding
+   with real project context from Jira/frontend — `TicketInput.project_id` now flows from the
+   selected Jira project into `retrieve_context_node`/`finalize_coaching_session`;
+   `TEMP_EVAL_PROJECT_ID` remains only as the fallback for manually-entered tickets
 4. User-approved Jira update
 5. End-to-end testing
 6. Deployment

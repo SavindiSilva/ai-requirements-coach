@@ -35,6 +35,13 @@ class TicketInput(BaseModel):
         default=None,
         description="The Jira issue key this ticket was imported from, if any. None for tickets entered manually. Lets /finalize know which Jira issue an approved update should write back to.",
     )
+    project_id: str | None = Field(
+        default=None,
+        description="The Jira project this ticket belongs to, if imported from Jira. Scopes RAG "
+        "knowledge retrieval (app/rag/store.py) to that project's uploaded documents. None for "
+        "tickets entered manually, in which case retrieval falls back to "
+        "app/agent/rag_integration.py's TEMP_EVAL_PROJECT_ID.",
+    )
 
 
 class CriterionScore(BaseModel):

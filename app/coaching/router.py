@@ -20,15 +20,15 @@ Phase 2E covers the fifth step: once coaching is complete, synthesise the
 original ticket plus the accumulated coaching history into a structured,
 development-ready requirement via one Claude call, and store it on the
 session. Idempotent - a session that already has a final requirement
-returns the stored result without calling Claude again. User approval,
-Jira updates, RAG, and persistence are later milestones.
+returns the stored result without calling Claude again. User approval
+and persistence are later milestones.
 """
 
 from fastapi import APIRouter, HTTPException
 
 from app.agent.graph import analyze_ticket
 from app.agent.llm import LLMAnalysisError
-from app.agent.rag_integration import get_retrieved_context
+from app.agent.rag_integration import TEMP_EVAL_PROJECT_ID, get_retrieved_context
 from app.analysis.schemas import TicketInput
 from app.coaching.llm import (
     CoachingLLMError,
@@ -250,7 +250,8 @@ def finalize_coaching_session(session_id: str) -> FinalizeResponse:
 
         ticket = session["ticket"]
         query_text = f"{ticket.title}\n{ticket.description}"
-        retrieved_context = get_retrieved_context(query_text)
+        project_id = ticket.project_id or TEMP_EVAL_PROJECT_ID
+        retrieved_context = get_retrieved_context(query_text, project_id=project_id)
 
         system_prompt = build_finalize_system_prompt()
         user_prompt = build_finalize_user_prompt(

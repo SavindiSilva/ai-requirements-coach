@@ -64,6 +64,10 @@ from app.jira.router import router as jira_router
 app.include_router(jira_oauth_router, prefix="/jira", tags=["jira-oauth"])
 app.include_router(jira_router, prefix="/api/jira", tags=["jira"])
 
+from app.rag.router import router as knowledge_router
+
+app.include_router(knowledge_router, prefix="/api/knowledge", tags=["knowledge"])
+
 # from app.tickets.router import router as tickets_router
 #
 # app.include_router(tickets_router, prefix="/tickets", tags=["tickets"])
