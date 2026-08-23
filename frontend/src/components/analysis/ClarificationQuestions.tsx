@@ -6,7 +6,7 @@ export function ClarificationQuestions({ questions }: { questions: Clarification
 
   return (
     <div>
-      <h3 className="mb-2 text-xs font-medium tracking-wide text-[color-mix(in_srgb,var(--color-text)_50%,transparent)] uppercase">
+      <h3 className="mb-2 text-[10.5px] font-medium tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
         Clarification Questions
       </h3>
       <div className="flex flex-col gap-2.5">

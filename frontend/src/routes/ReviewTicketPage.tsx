@@ -80,11 +80,11 @@ export function ReviewTicketPage() {
 
     return (
       <div className="mx-auto max-w-3xl px-6 py-10">
-        <Card className="mb-8 p-9">
+        <Card className="mb-6 p-9">
           <span className="mb-4 inline-flex w-max items-center rounded-full border border-[var(--color-accent)] px-3 py-1 text-[10px] font-medium tracking-[0.08em] text-[var(--color-accent)] uppercase">
             AI Requirements Coach
           </span>
-          <h1 className="mb-3 text-2xl font-medium">
+          <h1 className="mb-1.5 text-2xl font-medium">
             Improve your software requirements before development starts
           </h1>
           <p className="mb-6 text-sm text-[color-mix(in_srgb,var(--color-text)_55%,transparent)]">
@@ -94,22 +94,22 @@ export function ReviewTicketPage() {
           <Button onClick={() => setShowLanding(false)}>Review Ticket</Button>
         </Card>
 
-        <div className="mb-8 grid grid-cols-2 gap-3.5">
+        <div className="mb-6 grid grid-cols-2 gap-3.5">
           <Card className="p-5">
-            <div className="mb-2.5 text-[11px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_50%,transparent)] uppercase">
+            <div className="mb-2.5 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
               Tickets Reviewed
             </div>
             <div className="text-[28px] font-medium tracking-tight">{ticketsReviewed}</div>
           </Card>
           <Card className="p-5">
-            <div className="mb-2.5 text-[11px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_50%,transparent)] uppercase">
+            <div className="mb-2.5 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
               Average Readiness Score
             </div>
             <div className="text-[28px] font-medium tracking-tight">{averageReadinessLabel}</div>
           </Card>
         </div>
 
-        <h2 className="mb-3.5 text-[15px] font-medium">Recently Reviewed Tickets</h2>
+        <h2 className="mb-3.5 text-base font-medium">Recently Reviewed Tickets</h2>
         <Card className="overflow-hidden p-0">
           {reviewedTickets.length === 0 ? (
             <div className="px-5 py-8 text-center text-sm text-[color-mix(in_srgb,var(--color-text)_40%,transparent)]">
@@ -119,7 +119,7 @@ export function ReviewTicketPage() {
             reviewedTickets.map((rt, i) => (
               <div
                 key={i}
-                className="grid grid-cols-[80px_1fr_100px_90px] items-center gap-4 border-b border-[var(--color-divider)] px-5 py-3.5 last:border-b-0"
+                className="grid grid-cols-[80px_1fr_100px_90px] items-center gap-4 border-b border-[var(--color-divider)] px-4 py-3 last:border-b-0"
               >
                 <div className="text-xs text-[color-mix(in_srgb,var(--color-text)_50%,transparent)]">
                   {rt.issueKey ?? '—'}

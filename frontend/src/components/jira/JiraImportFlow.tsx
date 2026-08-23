@@ -99,7 +99,7 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
 
   if (!connected) {
     return (
-      <Card className="p-5">
+      <Card className="max-w-md p-5">
         <p className="mb-4 text-sm leading-relaxed text-[color-mix(in_srgb,var(--color-text)_65%,transparent)]">
           Connect your Jira account to import a ticket for review.
         </p>

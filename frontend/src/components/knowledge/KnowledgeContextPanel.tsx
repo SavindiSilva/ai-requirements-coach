@@ -76,7 +76,7 @@ export function KnowledgeContextPanel({ projectId }: KnowledgeContextPanelProps)
         AI can use relevant company and project guidelines when analysing this ticket.
       </p>
 
-      <div className="mb-1.5 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_40%,transparent)] uppercase">
+      <div className="mb-1.5 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
         Company Knowledge
       </div>
       <div className="mb-3 flex flex-col gap-1.5 text-sm">
@@ -93,7 +93,7 @@ export function KnowledgeContextPanel({ projectId }: KnowledgeContextPanelProps)
         )}
       </div>
 
-      <div className="mb-1.5 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_40%,transparent)] uppercase">
+      <div className="mb-1.5 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
         Project Knowledge
       </div>
       <div className="mb-3.5 flex flex-col gap-1.5 text-sm">

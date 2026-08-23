@@ -7,7 +7,7 @@ interface FindingListProps {
 export function FindingList({ title, items, emptyLabel = 'None identified.' }: FindingListProps) {
   return (
     <div>
-      <h3 className="mb-2 text-xs font-medium tracking-wide text-[color-mix(in_srgb,var(--color-text)_50%,transparent)] uppercase">
+      <h3 className="mb-2 text-[10.5px] font-medium tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
         {title}
       </h3>
       {items.length === 0 ? (

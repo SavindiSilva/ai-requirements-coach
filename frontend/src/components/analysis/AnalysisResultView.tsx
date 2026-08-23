@@ -27,7 +27,7 @@ export function AnalysisResultView({ ticket, result }: AnalysisResultViewProps) 
   return (
     <div className="flex flex-col gap-6">
       <Card className="p-5">
-        <h2 className="mb-1.5 text-lg font-medium">{ticket.title}</h2>
+        <h2 className="mb-1.5 text-base font-medium">{ticket.title}</h2>
         <p className="mb-4 text-sm leading-relaxed text-[color-mix(in_srgb,var(--color-text)_65%,transparent)]">
           {ticket.description}
         </p>

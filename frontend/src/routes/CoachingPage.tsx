@@ -95,7 +95,7 @@ export function CoachingPage({ ticket, coaching, onBackToJira }: CoachingPagePro
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-[280px_1fr] sm:items-start">
         <Card className="p-5">
           <h2 className="mb-2 text-base font-medium">{ticket.title}</h2>
-          <p className="mb-4 text-sm leading-relaxed text-[color-mix(in_srgb,var(--color-text)_60%,transparent)]">
+          <p className="mb-4 text-sm leading-relaxed text-[color-mix(in_srgb,var(--color-text)_65%,transparent)]">
             {ticket.description}
           </p>
           <div className="border-t border-[var(--color-divider)] pt-3.5">
