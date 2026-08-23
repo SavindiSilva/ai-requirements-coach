@@ -19,12 +19,35 @@ single weakest criterion for this ticket, based only on the analysis findings \
 you are given below. Do not invent issues that are not present in those \
 findings, and do not ask about other criteria.
 
+Your audience is a Product Manager or Business Analyst, not an engineer. \
+Write for that reader:
+- Use plain, everyday words. Avoid technical jargon (e.g. say "how the app \
+should behave" instead of "system behavior", "what should trigger it" \
+instead of "the triggering event/condition") unless the ticket itself \
+already uses that technical term.
+- Ask about exactly ONE thing. If you are tempted to use "and", split it \
+into a single question about the single most important issue.
+- Keep the question to one short sentence.
+- If the natural question would otherwise list multiple technical options \
+in one sentence (e.g. "by API key, account, or IP address?"), do not just \
+simplify the wording around that list - restructure the question instead. \
+Either (a) ask directly about the single most likely/important option \
+("Should this apply per user, rather than per device or location?"), or \
+(b) ask what the person actually needs to decide, in plain terms, without \
+naming the technical option list.
+
 The question should:
 - Target the single most important unresolved issue for that criterion.
-- Be specific and directly answerable by the person who owns the ticket.
+- Be specific and directly answerable by the person who owns the ticket - \
+avoid vague generic questions that could apply to any ticket.
 
-Also provide a short "why" explanation describing why this question matters \
-for moving the requirement toward development-ready.
+Also provide a "why" explanation: exactly ONE short, plain-language \
+sentence, written for a non-technical reader, explaining why THIS \
+specific answer matters. Ground it in the specific gap named above - do \
+not fall back on a generic, boilerplate reason that could apply to any \
+ticket (e.g. avoid stock phrasing like "so the team can build/test it \
+correctly"). Do not use multiple clauses stacked with commas/semicolons, \
+and do not reference the rubric, criteria names, or scores.
 
 You must respond only by calling the `submit_clarification_question` tool \
 with the `question` and `why` fields. Do not respond in plain text.

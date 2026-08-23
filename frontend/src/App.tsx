@@ -1,12 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReviewTicketPage } from './routes/ReviewTicketPage';
+import { AppShell } from './routes/AppShell';
 
 const queryClient = new QueryClient();
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ReviewTicketPage />
+      <AppShell />
     </QueryClientProvider>
   );
 }

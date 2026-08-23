@@ -1,0 +1,64 @@
+import { Card } from '../ui/Card';
+import { formatScore } from '../../lib/format';
+import type { ReviewedTicket } from '../../lib/types/reviewedTicket';
+
+interface ReviewedTicketsTableProps {
+  reviewedTickets: ReviewedTicket[];
+  emptyMessage?: string;
+}
+
+// Derived from the real coaching stop_reason — never fabricated. Matches
+// the AI Review status vocabulary in CLAUDE.md section 16.
+function getAiReviewStatus(stopReason: string | null): { label: string; colorClass: string } {
+  if (stopReason === 'readiness_threshold_met') {
+    return { label: 'Ready', colorClass: 'text-[var(--color-success)]' };
+  }
+  if (stopReason === 'max_questions_reached') {
+    return { label: 'Needs Clarification', colorClass: 'text-[var(--color-warning)]' };
+  }
+  return { label: 'Not Reviewed', colorClass: 'text-[color-mix(in_srgb,var(--color-text)_55%,transparent)]' };
+}
+
+export function ReviewedTicketsTable({
+  reviewedTickets,
+  emptyMessage = 'No tickets reviewed yet this session.',
+}: ReviewedTicketsTableProps) {
+  return (
+    <Card className="overflow-hidden p-0">
+      {reviewedTickets.length === 0 ? (
+        <div className="px-5 py-8 text-center text-sm text-[color-mix(in_srgb,var(--color-text)_40%,transparent)]">
+          {emptyMessage}
+        </div>
+      ) : (
+        reviewedTickets.map((rt, i) => {
+          const status = getAiReviewStatus(rt.stopReason);
+          return (
+            <div
+              key={i}
+              className="grid grid-cols-[80px_1fr_100px_140px_90px] items-center gap-4 border-b border-[var(--color-divider)] px-4 py-3 last:border-b-0"
+            >
+              <div className="text-xs text-[color-mix(in_srgb,var(--color-text)_50%,transparent)]">
+                {rt.issueKey ?? '—'}
+              </div>
+              <div className="truncate text-sm">{rt.title}</div>
+              <div className="text-xs text-[color-mix(in_srgb,var(--color-text)_50%,transparent)]">
+                Readiness{' '}
+                <span className="font-medium text-[var(--color-text)]">{formatScore(rt.readiness)}/3</span>
+              </div>
+              <div>
+                <span
+                  className={`inline-flex items-center rounded-[calc(var(--radius-md)*0.75)] bg-[var(--color-neutral-800)] px-2.5 py-1 text-[11px] font-medium whitespace-nowrap ${status.colorClass}`}
+                >
+                  {status.label}
+                </span>
+              </div>
+              <div className="text-right text-xs text-[color-mix(in_srgb,var(--color-text)_40%,transparent)]">
+                {new Date(rt.reviewedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </div>
+            </div>
+          );
+        })
+      )}
+    </Card>
+  );
+}

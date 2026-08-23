@@ -10,11 +10,13 @@ import { useFinalizeCoaching } from '../hooks/useFinalizeCoaching';
 import { ApiError } from '../lib/api/client';
 import type { CoachingStartResponse, CurrentScores } from '../lib/types/coaching';
 import type { TicketInput } from '../lib/types/analysis';
+import type { ReviewedTicket } from '../lib/types/reviewedTicket';
 
 interface CoachingPageProps {
   ticket: TicketInput;
   coaching: CoachingStartResponse;
   onBackToJira: () => void;
+  onTicketReviewed: (ticket: ReviewedTicket) => void;
 }
 
 interface SessionState {
@@ -40,7 +42,7 @@ const STOP_REASON_LABELS: Record<string, string> = {
   readiness_threshold_met: 'Readiness threshold met — this ticket is sufficiently clear.',
 };
 
-export function CoachingPage({ ticket, coaching, onBackToJira }: CoachingPageProps) {
+export function CoachingPage({ ticket, coaching, onBackToJira, onTicketReviewed }: CoachingPageProps) {
   const [session, setSession] = useState<SessionState>(() => ({
     question: coaching.question,
     why: coaching.why,
@@ -57,7 +59,24 @@ export function CoachingPage({ ticket, coaching, onBackToJira }: CoachingPagePro
   const finalizeMutation = useFinalizeCoaching();
 
   function handleFinalize() {
-    finalizeMutation.mutate(coaching.session_id);
+    finalizeMutation.mutate(coaching.session_id, {
+      onSuccess: (result) => {
+        const scores = result.current_scores;
+        const readiness =
+          (scores.requirement_clarity +
+            scores.acceptance_criteria +
+            scores.open_questions +
+            scores.scope_definition) /
+          4;
+        onTicketReviewed({
+          issueKey: ticket.source_issue_key ?? undefined,
+          title: ticket.title,
+          readiness,
+          reviewedAt: Date.now(),
+          stopReason: result.stop_reason,
+        });
+      },
+    });
   }
 
   function handleSubmitAnswer(e: FormEvent) {

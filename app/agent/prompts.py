@@ -42,9 +42,25 @@ possible, not confirmed - ticket text alone is never enough to confirm a \
 dependency.
 
 Clarification questions: identify the most important unresolved issues, \
-ordered by impact (highest-impact first). For each, give the question and a \
-short reason explaining why it matters. Provide at most \
+ordered by impact (highest-impact first). Provide at most \
 {max_questions} questions, and fewer if the ticket does not need that many.
+
+These questions and reasons are shown directly to a Product Manager or \
+Business Analyst, not an engineer. Write for that reader:
+- Use plain, everyday words. Avoid technical jargon unless the ticket \
+itself already uses that term.
+- Ask about exactly ONE thing per question, in one short sentence.
+- If the natural question would otherwise list multiple technical options \
+in one sentence (e.g. "by API key, account, or IP address?"), do not just \
+simplify the wording around that list - restructure the question instead. \
+Either (a) ask directly about the single most likely/important option \
+("Should this apply per user, rather than per device or location?"), or \
+(b) ask what the person actually needs to decide, in plain terms, without \
+naming the technical option list.
+- The reason should be exactly ONE short, plain-language sentence grounded \
+in the specific issue - not a generic boilerplate reason that could apply \
+to any ticket, and not a reference to the rubric, criteria names, or \
+scores.
 
 If the ticket text below includes a "Previous clarification" section, treat \
 those question/answer pairs as authoritative new information about the \

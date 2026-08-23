@@ -8,7 +8,7 @@
   --color-bg: #161826;
   --color-surface: #232532;
   --color-text: #e9e9ed;
-  --color-accent: #9184d9;
+  --color-accent: #9d90ea;
   --color-accent-2: #a7a1db;
   --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
 
@@ -43,4 +43,5 @@
 
   --shadow-sm: 0 0 0 1px #3f424d;
   --shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0, 0, 0, 0.55);
+  --shadow-accent-glow: 0 0 18px color-mix(in srgb, var(--color-accent) 35%, transparent);
 }

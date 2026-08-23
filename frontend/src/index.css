@@ -12,3 +12,12 @@ body {
 ::placeholder {
   color: color-mix(in srgb, var(--color-text) 40%, transparent);
 }
+
+.dot-grid-bg {
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--color-text) 20%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 24px 24px;
+}
