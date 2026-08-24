@@ -36,6 +36,8 @@ class JiraIssueSummary(BaseModel):
     summary: str
     status: str = Field(..., description="Jira's own workflow status - kept separate from AI review status (CLAUDE.md section 16).")
     issue_type: str
+    assignee: str | None = Field(default=None, description="Assignee display name, or None if unassigned.")
+    priority: str | None = Field(default=None, description="Priority name, or None if the project has no priority scheme configured.")
 
 
 class JiraIssueDetail(JiraIssueSummary):

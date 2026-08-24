@@ -449,7 +449,7 @@ def test_list_issues_parses_response(monkeypatch):
     def _fake_get(url, headers=None, params=None, **kwargs):
         assert url.endswith("/search/jql")
         assert 'project = "PROJ"' in params["jql"]
-        assert params["fields"] == "summary,status,issuetype"
+        assert params["fields"] == "summary,status,issuetype,assignee,priority"
         # Real /search/jql response shape (isLast/nextPageToken, no
         # startAt/total) - list_issues() must not depend on those old
         # top-level fields, only on "issues".
@@ -464,6 +464,8 @@ def test_list_issues_parses_response(monkeypatch):
                             "summary": "Add notification feature",
                             "status": {"name": "To Do"},
                             "issuetype": {"name": "Story"},
+                            "assignee": {"accountId": "abc123", "displayName": "Mia Krystof"},
+                            "priority": {"id": "3", "name": "Medium"},
                         },
                     }
                 ],
@@ -478,6 +480,42 @@ def test_list_issues_parses_response(monkeypatch):
     assert issues[0].key == "PROJ-1"
     assert issues[0].status == "To Do"
     assert issues[0].issue_type == "Story"
+    assert issues[0].assignee == "Mia Krystof"
+    assert issues[0].priority == "Medium"
+
+
+def test_list_issues_handles_unassigned_and_no_priority_scheme(monkeypatch):
+    # Both are real, common cases: an unassigned issue, and a project whose
+    # field configuration doesn't include priority at all - Jira returns
+    # `null` for the field in both cases rather than omitting the key.
+    store.save_connection(_make_connection())
+
+    def _fake_get(url, headers=None, params=None, **kwargs):
+        return httpx.Response(
+            200,
+            json={
+                "isLast": True,
+                "issues": [
+                    {
+                        "key": "PROJ-2",
+                        "fields": {
+                            "summary": "Unassigned, no-priority ticket",
+                            "status": {"name": "Backlog"},
+                            "issuetype": {"name": "Task"},
+                            "assignee": None,
+                            "priority": None,
+                        },
+                    }
+                ],
+            },
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(client.httpx, "get", _fake_get)
+
+    issues = client.list_issues("PROJ")
+    assert issues[0].assignee is None
+    assert issues[0].priority is None
 
 
 def test_get_issue_parses_description_and_links(monkeypatch):

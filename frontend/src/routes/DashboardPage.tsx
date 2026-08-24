@@ -2,7 +2,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { ReviewedTicketsTable } from '../components/tickets/ReviewedTicketsTable';
 import { formatScore } from '../lib/format';
-import { READINESS_PASS_THRESHOLD } from '../lib/readiness';
+import { STOP_REASON_READY } from '../lib/aiReviewStatus';
 import { useReviewedTickets } from '../hooks/useReviewedTickets';
 
 interface DashboardPageProps {
@@ -18,7 +18,7 @@ export function DashboardPage({ onStartReview, onViewHistory }: DashboardPagePro
     ticketsReviewed > 0
       ? `${formatScore(reviewedTickets.reduce((sum, rt) => sum + rt.readiness, 0) / ticketsReviewed)} / 3`
       : '—';
-  const ticketsReady = reviewedTickets.filter((rt) => rt.readiness >= READINESS_PASS_THRESHOLD).length;
+  const ticketsReady = reviewedTickets.filter((rt) => rt.stopReason === STOP_REASON_READY).length;
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">

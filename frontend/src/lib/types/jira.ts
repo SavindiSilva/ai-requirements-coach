@@ -20,6 +20,8 @@ export interface JiraIssueSummary {
   summary: string;
   status: string; // Jira's own workflow status — kept separate from AI review status
   issue_type: string;
+  assignee: string | null; // null if unassigned
+  priority: string | null; // null if the project has no priority scheme configured
 }
 
 export interface JiraIssueDetail extends JiraIssueSummary {

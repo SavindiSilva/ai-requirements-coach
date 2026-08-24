@@ -101,7 +101,7 @@ def list_issues(project_id: str) -> list[JiraIssueSummary]:
         "/search/jql",
         params={
             "jql": f'project = "{project_id}" ORDER BY created DESC',
-            "fields": "summary,status,issuetype",
+            "fields": "summary,status,issuetype,assignee,priority",
             "maxResults": 50,
         },
     )
@@ -111,6 +111,8 @@ def list_issues(project_id: str) -> list[JiraIssueSummary]:
             summary=issue["fields"]["summary"],
             status=issue["fields"]["status"]["name"],
             issue_type=issue["fields"]["issuetype"]["name"],
+            assignee=(issue["fields"].get("assignee") or {}).get("displayName"),
+            priority=(issue["fields"].get("priority") or {}).get("name"),
         )
         for issue in data.get("issues", [])
     ]

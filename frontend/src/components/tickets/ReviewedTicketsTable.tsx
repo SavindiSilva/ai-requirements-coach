@@ -1,22 +1,11 @@
 import { Card } from '../ui/Card';
 import { formatScore } from '../../lib/format';
+import { getAiReviewStatus } from '../../lib/aiReviewStatus';
 import type { ReviewedTicket } from '../../lib/types/reviewedTicket';
 
 interface ReviewedTicketsTableProps {
   reviewedTickets: ReviewedTicket[];
   emptyMessage?: string;
-}
-
-// Derived from the real coaching stop_reason — never fabricated. Matches
-// the AI Review status vocabulary in CLAUDE.md section 16.
-function getAiReviewStatus(stopReason: string | null): { label: string; colorClass: string } {
-  if (stopReason === 'readiness_threshold_met') {
-    return { label: 'Ready', colorClass: 'text-[var(--color-success)]' };
-  }
-  if (stopReason === 'max_questions_reached') {
-    return { label: 'Needs Clarification', colorClass: 'text-[var(--color-warning)]' };
-  }
-  return { label: 'Not Reviewed', colorClass: 'text-[color-mix(in_srgb,var(--color-text)_55%,transparent)]' };
 }
 
 export function ReviewedTicketsTable({

@@ -3,12 +3,21 @@ import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { KnowledgeContextPanel } from '../knowledge/KnowledgeContextPanel';
 import { fieldInputClasses } from '../../lib/fieldStyles';
+import { formatScore } from '../../lib/format';
+import { getAiReviewStatus } from '../../lib/aiReviewStatus';
 import { useJiraStatus } from '../../hooks/useJiraStatus';
 import { useJiraProjects } from '../../hooks/useJiraProjects';
 import { useJiraProjectIssues } from '../../hooks/useJiraProjectIssues';
 import { useJiraIssue } from '../../hooks/useJiraIssue';
+import { useReviewedTickets } from '../../hooks/useReviewedTickets';
 import { API_BASE_URL, ApiError } from '../../lib/api/client';
 import type { TicketInput } from '../../lib/types/analysis';
+import type { ReviewedTicket } from '../../lib/types/reviewedTicket';
+
+// The three states useReviewedTickets()-derived AI Review can be in for a
+// Jira issue - matches getAiReviewStatus()'s label vocabulary exactly, so
+// this doubles as the filter dropdown's option list.
+const AI_REVIEW_OPTIONS = ['Not Reviewed', 'Ready', 'Needs Clarification'] as const;
 
 interface JiraImportFlowProps {
   onTicketReady: (ticket: TicketInput) => void;
@@ -29,6 +38,8 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
   const [selectedIssueKey, setSelectedIssueKey] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [priorityFilter, setPriorityFilter] = useState('All');
+  const [aiReviewFilter, setAiReviewFilter] = useState('All');
 
   const statusQuery = useJiraStatus();
   const connected = statusQuery.data?.connected ?? false;
@@ -39,13 +50,38 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
   const projectsQuery = useJiraProjects(connected);
   const issuesQuery = useJiraProjectIssues(connected && selectedProjectId ? selectedProjectId : null);
   const issueQuery = useJiraIssue(connected && selectedIssueKey ? selectedIssueKey : null);
+  // AI Review/Readiness aren't new backend data - they're derived by
+  // cross-referencing each issue's key against this same reviewed-ticket
+  // history the Dashboard/History already fetch, entirely client-side.
+  const reviewedTicketsQuery = useReviewedTickets();
 
-  // Derived from whatever statuses this project's issues actually use,
-  // rather than a hardcoded workflow — Jira status names are per-project.
+  // Most recent record per issue key. The backend already upserts by
+  // issue_key (one row per ticket), so this is a 1:1 lookup, not a
+  // "pick the latest of several" reduction.
+  const reviewedByIssueKey = useMemo(() => {
+    const map = new Map<string, ReviewedTicket>();
+    reviewedTicketsQuery.data?.forEach((rt) => {
+      if (rt.issueKey) map.set(rt.issueKey, rt);
+    });
+    return map;
+  }, [reviewedTicketsQuery.data]);
+
+  // Derived from whatever statuses/priorities this project's issues
+  // actually use, rather than a hardcoded list — both are per-project in
+  // Jira (status is a per-project workflow; priority scheme is optional
+  // and per-project too).
   const statusOptions = useMemo(() => {
     const statuses = new Set<string>();
     issuesQuery.data?.forEach((issue) => statuses.add(issue.status));
     return Array.from(statuses).sort();
+  }, [issuesQuery.data]);
+
+  const priorityOptions = useMemo(() => {
+    const priorities = new Set<string>();
+    issuesQuery.data?.forEach((issue) => {
+      if (issue.priority) priorities.add(issue.priority);
+    });
+    return Array.from(priorities).sort();
   }, [issuesQuery.data]);
 
   const filteredIssues = useMemo(() => {
@@ -55,9 +91,12 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
       const matchesTerm =
         !term || issue.key.toLowerCase().includes(term) || issue.summary.toLowerCase().includes(term);
       const matchesStatus = statusFilter === 'All' || issue.status === statusFilter;
-      return matchesTerm && matchesStatus;
+      const matchesPriority = priorityFilter === 'All' || issue.priority === priorityFilter;
+      const aiReviewLabel = getAiReviewStatus(reviewedByIssueKey.get(issue.key)?.stopReason).label;
+      const matchesAiReview = aiReviewFilter === 'All' || aiReviewLabel === aiReviewFilter;
+      return matchesTerm && matchesStatus && matchesPriority && matchesAiReview;
     });
-  }, [issuesQuery.data, searchTerm, statusFilter]);
+  }, [issuesQuery.data, searchTerm, statusFilter, priorityFilter, aiReviewFilter, reviewedByIssueKey]);
 
   function handleConnect() {
     window.location.href = `${API_BASE_URL}/jira/authorize`;
@@ -68,6 +107,8 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
     setSelectedIssueKey(null);
     setSearchTerm('');
     setStatusFilter('All');
+    setPriorityFilter('All');
+    setAiReviewFilter('All');
   }
 
   function handleChangeProject() {
@@ -75,6 +116,8 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
     setSelectedIssueKey(null);
     setSearchTerm('');
     setStatusFilter('All');
+    setPriorityFilter('All');
+    setAiReviewFilter('All');
   }
 
   function handleUseTicket() {
@@ -189,32 +232,76 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
                       </option>
                     ))}
                   </select>
+                  <select
+                    value={priorityFilter}
+                    onChange={(e) => setPriorityFilter(e.target.value)}
+                    className={`sm:w-40 ${fieldInputClasses(false)}`}
+                  >
+                    <option value="All">Priority: All</option>
+                    {priorityOptions.map((priority) => (
+                      <option key={priority} value={priority}>
+                        {priority}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={aiReviewFilter}
+                    onChange={(e) => setAiReviewFilter(e.target.value)}
+                    className={`sm:w-44 ${fieldInputClasses(false)}`}
+                  >
+                    <option value="All">AI Review: All</option>
+                    {AI_REVIEW_OPTIONS.map((label) => (
+                      <option key={label} value={label}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <Card className="overflow-hidden p-0">
-                  <div className="grid grid-cols-[1fr_130px] gap-3 border-b border-[var(--color-divider)] px-4 py-2 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
+                  <div className="grid grid-cols-[1fr_110px_120px_110px_130px_90px] gap-3 border-b border-[var(--color-divider)] px-4 py-2 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
                     <div>Ticket</div>
                     <div>Jira Status</div>
+                    <div>Assignee</div>
+                    <div>Priority</div>
+                    <div>AI Review</div>
+                    <div>Readiness</div>
                   </div>
-                  {filteredIssues?.map((issue) => (
-                    <div
-                      key={issue.key}
-                      onClick={() => setSelectedIssueKey(issue.key)}
-                      className={`grid cursor-pointer grid-cols-[1fr_130px] items-center gap-3 border-b border-[var(--color-divider)] px-4 py-3 last:border-b-0 hover:bg-[color-mix(in_srgb,var(--color-text)_6%,transparent)] ${
-                        issue.key === selectedIssueKey ? selectedCardClasses : ''
-                      }`}
-                    >
-                      <div>
-                        <div className="text-xs text-[color-mix(in_srgb,var(--color-text)_50%,transparent)]">{issue.key}</div>
-                        <div className="text-sm font-medium">{issue.summary}</div>
+                  {filteredIssues?.map((issue) => {
+                    const reviewedTicket = reviewedByIssueKey.get(issue.key);
+                    const aiReview = getAiReviewStatus(reviewedTicket?.stopReason);
+                    return (
+                      <div
+                        key={issue.key}
+                        onClick={() => setSelectedIssueKey(issue.key)}
+                        className={`grid cursor-pointer grid-cols-[1fr_110px_120px_110px_130px_90px] items-center gap-3 border-b border-[var(--color-divider)] px-4 py-3 last:border-b-0 hover:bg-[color-mix(in_srgb,var(--color-text)_6%,transparent)] ${
+                          issue.key === selectedIssueKey ? selectedCardClasses : ''
+                        }`}
+                      >
+                        <div>
+                          <div className="text-xs text-[color-mix(in_srgb,var(--color-text)_50%,transparent)]">{issue.key}</div>
+                          <div className="text-sm font-medium">{issue.summary}</div>
+                        </div>
+                        <div>
+                          <span className="inline-flex h-[20px] items-center rounded-[var(--radius-sm)] bg-[var(--color-neutral-800)] px-2 text-[11px] text-[color-mix(in_srgb,var(--color-text)_70%,transparent)]">
+                            {issue.status}
+                          </span>
+                        </div>
+                        <div className="truncate text-xs text-[color-mix(in_srgb,var(--color-text)_65%,transparent)]">
+                          {issue.assignee ?? 'Unassigned'}
+                        </div>
+                        <div className="truncate text-xs text-[color-mix(in_srgb,var(--color-text)_65%,transparent)]">
+                          {issue.priority ?? '—'}
+                        </div>
+                        <div>
+                          <span className={`text-xs font-medium whitespace-nowrap ${aiReview.colorClass}`}>{aiReview.label}</span>
+                        </div>
+                        <div className="text-xs text-[color-mix(in_srgb,var(--color-text)_65%,transparent)]">
+                          {reviewedTicket ? `${formatScore(reviewedTicket.readiness)}/3` : '—'}
+                        </div>
                       </div>
-                      <div>
-                        <span className="inline-flex h-[20px] items-center rounded-[var(--radius-sm)] bg-[var(--color-neutral-800)] px-2 text-[11px] text-[color-mix(in_srgb,var(--color-text)_70%,transparent)]">
-                          {issue.status}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {filteredIssues && filteredIssues.length === 0 && (
                     <div className="px-4 py-8 text-center text-sm text-[color-mix(in_srgb,var(--color-text)_40%,transparent)]">
                       No tickets match your filters.
