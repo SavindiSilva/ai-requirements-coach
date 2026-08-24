@@ -4,50 +4,28 @@ import { Button } from '../ui/Button';
 import { Field } from '../ui/Field';
 import { fieldInputClasses } from '../../lib/fieldStyles';
 import { useUploadKnowledgeDocument } from '../../hooks/useUploadKnowledgeDocument';
+import { useKnowledgeDocuments } from '../../hooks/useKnowledgeDocuments';
 import { ApiError } from '../../lib/api/client';
-import { DOCUMENT_TYPES_BY_SCOPE } from '../../lib/types/knowledge';
-import type { DocumentType, KnowledgeScope } from '../../lib/types/knowledge';
 
 interface KnowledgeContextPanelProps {
   projectId: string;
-}
-
-interface UploadedDocument {
-  id: string;
-  title: string;
-  scope: KnowledgeScope;
 }
 
 const SUPPORTED_EXTENSIONS = '.pdf,.docx,.txt,.md';
 
 export function KnowledgeContextPanel({ projectId }: KnowledgeContextPanelProps) {
   const [isManaging, setIsManaging] = useState(false);
-  const [scope, setScope] = useState<KnowledgeScope>('company');
-  const [documentType, setDocumentType] = useState<DocumentType>(DOCUMENT_TYPES_BY_SCOPE.company[0].value);
   const [title, setTitle] = useState('');
-  const [uploadedDocs, setUploadedDocs] = useState<UploadedDocument[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mutation = useUploadKnowledgeDocument();
-
-  const companyDocs = uploadedDocs.filter((doc) => doc.scope === 'company');
-  const projectDocs = uploadedDocs.filter((doc) => doc.scope === 'project');
-
-  function handleScopeChange(nextScope: KnowledgeScope) {
-    setScope(nextScope);
-    setDocumentType(DOCUMENT_TYPES_BY_SCOPE[nextScope][0].value);
-  }
+  const documentsQuery = useKnowledgeDocuments(projectId);
+  const documents = documentsQuery.data ?? [];
 
   function handleFile(file: File) {
-    const resolvedTitle = title.trim() || file.name;
     mutation.mutate(
-      { file, projectId, documentType, title: title.trim() || undefined },
-      {
-        onSuccess: (result) => {
-          setUploadedDocs((prev) => [...prev, { id: result.document_id, title: resolvedTitle, scope }]);
-          setTitle('');
-        },
-      },
+      { file, projectId, title: title.trim() || undefined },
+      { onSuccess: () => setTitle('') },
     );
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
@@ -76,43 +54,27 @@ export function KnowledgeContextPanel({ projectId }: KnowledgeContextPanelProps)
         AI can use relevant company and project guidelines when analysing this ticket.
       </p>
 
-      <div className="mb-1.5 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
-        Company Knowledge
-      </div>
-      <div className="mb-3 flex flex-col gap-1.5 text-sm">
-        {companyDocs.length === 0 ? (
-          <p className="text-[12.5px] text-[color-mix(in_srgb,var(--color-text)_40%,transparent)]">
-            No company documents uploaded yet.
-          </p>
-        ) : (
-          companyDocs.map((doc) => (
-            <div key={doc.id} className="flex items-center gap-2">
-              <span className="text-[var(--color-success)]">✓</span> {doc.title}
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="mb-1.5 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
-        Project Knowledge
-      </div>
       <div className="mb-3.5 flex flex-col gap-1.5 text-sm">
-        {projectDocs.length === 0 ? (
+        {documentsQuery.isLoading ? (
           <p className="text-[12.5px] text-[color-mix(in_srgb,var(--color-text)_40%,transparent)]">
-            No project documents uploaded yet.
+            Loading documents…
+          </p>
+        ) : documents.length === 0 ? (
+          <p className="text-[12.5px] text-[color-mix(in_srgb,var(--color-text)_40%,transparent)]">
+            No documents uploaded yet.
           </p>
         ) : (
-          projectDocs.map((doc) => (
-            <div key={doc.id} className="flex items-center gap-2">
+          documents.map((doc) => (
+            <div key={doc.document_id} className="flex items-center gap-2">
               <span className="text-[var(--color-success)]">✓</span> {doc.title}
             </div>
           ))
         )}
       </div>
 
-      {uploadedDocs.length > 0 && (
+      {documents.length > 0 && (
         <div className="mb-3 text-xs text-[color-mix(in_srgb,var(--color-text)_40%,transparent)]">
-          {uploadedDocs.length} relevant document{uploadedDocs.length === 1 ? '' : 's'} available
+          {documents.length} relevant document{documents.length === 1 ? '' : 's'} available
         </div>
       )}
 
@@ -122,39 +84,6 @@ export function KnowledgeContextPanel({ projectId }: KnowledgeContextPanelProps)
 
       {isManaging && (
         <div className="flex flex-col gap-3">
-          <div className="flex gap-2">
-            <Button
-              variant={scope === 'company' ? 'primary' : 'secondary'}
-              className="flex-1"
-              onClick={() => handleScopeChange('company')}
-            >
-              Company Knowledge
-            </Button>
-            <Button
-              variant={scope === 'project' ? 'primary' : 'secondary'}
-              className="flex-1"
-              onClick={() => handleScopeChange('project')}
-            >
-              Project Knowledge
-            </Button>
-          </div>
-
-          <Field label="Document Type" htmlFor="knowledge-document-type">
-            <select
-              id="knowledge-document-type"
-              value={documentType}
-              onChange={(e) => setDocumentType(e.target.value as DocumentType)}
-              className={fieldInputClasses(false)}
-              disabled={mutation.isPending}
-            >
-              {DOCUMENT_TYPES_BY_SCOPE[scope].map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-
           <Field label="Title (optional)" htmlFor="knowledge-title">
             <input
               id="knowledge-title"

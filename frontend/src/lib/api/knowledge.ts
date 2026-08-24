@@ -1,24 +1,25 @@
-import { apiPostForm } from './client';
-import type { DocumentType, IngestResult } from '../types/knowledge';
+import { apiGet, apiPostForm } from './client';
+import type { DocumentSummary, IngestResult } from '../types/knowledge';
 
 export interface UploadKnowledgeDocumentParams {
   file: File;
   projectId: string;
-  documentType: DocumentType;
   title?: string;
 }
 
 export function uploadKnowledgeDocument({
   file,
   projectId,
-  documentType,
   title,
 }: UploadKnowledgeDocumentParams): Promise<IngestResult> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('project_id', projectId);
-  formData.append('document_type', documentType);
   if (title) formData.append('title', title);
 
   return apiPostForm<IngestResult>('/api/knowledge/upload', formData);
+}
+
+export function getKnowledgeDocuments(projectId: string): Promise<DocumentSummary[]> {
+  return apiGet<DocumentSummary[]>(`/api/knowledge/documents?project_id=${encodeURIComponent(projectId)}`);
 }

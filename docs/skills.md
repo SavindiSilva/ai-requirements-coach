@@ -340,3 +340,31 @@ the same "optional capability" shape, not a departure from it.
   temporary placeholder before its real dependency exists, follow this
   shape (one named constant, one file, explicit removal plan) rather than
   hardcoding the placeholder value at each use site.
+
+## 10. Frontend: surviving a same-tab reload without real persistence
+
+`AppShell.tsx`'s `isLoggedIn`/`activeScreen` (docs/architecture.md §13) is
+the reference example for making purely cosmetic frontend state survive a
+page reload without adding real persistence. Reuse this shape any time a
+future fix needs "must survive this tab's reload" without needing "must
+survive a new tab/device/backend restart":
+
+- Read the initial value from `sessionStorage` via the `useState`
+  initializer function (`useState(readStoredIsLoggedIn)`), not a bare
+  literal — this reads storage exactly once, on mount, not on every
+  render.
+- Write back with one `useEffect` per stored value, keyed on that value's
+  own dependency array (`useEffect(() => sessionStorage.setItem(...),
+  [isLoggedIn])`) — not one combined effect for multiple values, so each
+  write only fires when its own value actually changes.
+- Validate whatever comes back out of storage before trusting it as the
+  typed value (`readStoredScreen()` falls back to `'dashboard'` unless the
+  stored string is one of the known `Screen` values) — storage can contain
+  a stale value from a previous build.
+- Prefer `sessionStorage` over `localStorage` when the state is explicitly
+  not meant to be "real" persistence (here, cosmetic login state with no
+  real auth behind it, per CLAUDE.md §29) — it clears on tab close, which
+  keeps the behavior honest about what it actually guarantees.
+- This is a plain browser API, not a new dependency or abstraction — don't
+  reach for a state-management library or a backend session endpoint for
+  something that's explicitly scoped to "one tab, until it's closed."

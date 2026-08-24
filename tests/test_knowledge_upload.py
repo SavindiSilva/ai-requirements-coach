@@ -27,7 +27,7 @@ from app.main import app
 from app.rag import extraction
 from app.rag.embeddings import EmbeddingError
 from app.rag.extraction import ExtractionError, UnsupportedFileTypeError, extract_text
-from app.rag.schemas import DocumentInput, DocumentType, IngestResult
+from app.rag.schemas import DocumentInput, DocumentSummary, DocumentType, IngestResult
 from app.rag.store import RAGStoreError
 
 client_app = TestClient(app)
@@ -206,6 +206,25 @@ def test_upload_empty_extracted_document_returns_400(monkeypatch):
     assert response.status_code == 400
 
 
+def test_upload_omitted_document_type_defaults_to_general(monkeypatch):
+    captured: dict = {}
+
+    def _fake_add_document(document: DocumentInput, document_id=None) -> IngestResult:
+        captured["document"] = document
+        return IngestResult(document_id="doc-general", chunk_count=1)
+
+    monkeypatch.setattr("app.rag.router.add_document", _fake_add_document)
+
+    response = client_app.post(
+        "/api/knowledge/upload",
+        files=_txt_file(),
+        data={"project_id": "proj-1", "title": "Refund Policy"},
+    )
+
+    assert response.status_code == 200
+    assert captured["document"].document_type == DocumentType.GENERAL
+
+
 def test_upload_missing_project_id_returns_422(monkeypatch):
     def _fail_if_called(document, document_id=None):
         raise AssertionError("add_document must not be called when project_id is missing")
@@ -281,3 +300,41 @@ def test_upload_returns_ingest_result_from_add_document(monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == {"document_id": "doc-xyz", "chunk_count": 4}
+
+
+# --- GET /api/knowledge/documents ---------------------------------------
+
+
+def test_list_documents_returns_documents_for_project(monkeypatch):
+    def _fake_list_documents(project_id: str) -> list[DocumentSummary]:
+        assert project_id == "proj-1"
+        return [
+            DocumentSummary(document_id="doc-1", title="Refund Policy", document_type=DocumentType.PRODUCT_RULE),
+            DocumentSummary(document_id="doc-2", title="Security Guidelines", document_type=DocumentType.GENERAL),
+        ]
+
+    monkeypatch.setattr("app.rag.router.list_documents", _fake_list_documents)
+
+    response = client_app.get("/api/knowledge/documents", params={"project_id": "proj-1"})
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"document_id": "doc-1", "title": "Refund Policy", "document_type": "product_rule"},
+        {"document_id": "doc-2", "title": "Security Guidelines", "document_type": "general"},
+    ]
+
+
+def test_list_documents_missing_project_id_returns_422():
+    response = client_app.get("/api/knowledge/documents")
+    assert response.status_code == 422
+
+
+def test_list_documents_rag_store_error_returns_502(monkeypatch):
+    def _raise(project_id: str):
+        raise RAGStoreError("Failed to list documents from ChromaDB")
+
+    monkeypatch.setattr("app.rag.router.list_documents", _raise)
+
+    response = client_app.get("/api/knowledge/documents", params={"project_id": "proj-1"})
+
+    assert response.status_code == 502

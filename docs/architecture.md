@@ -87,24 +87,31 @@ app/
 │   └── state.py           JiraConnectionState TypedDict
 ├── auth/                empty (__init__.py only) — not started
 ├── database/            empty (__init__.py only) — not started
-└── tickets/             empty (__init__.py only) — not started
+└── tickets/             reviewed-ticket history (TEMPORARY in-memory store, see §13)
+    ├── router.py          POST/GET /api/tickets/reviewed
+    ├── store.py           TEMPORARY in-memory list + upsert-by-issue_key
+    └── schemas.py         ReviewedTicket
 
 tests/
 ├── test_analysis.py       Phase 1 endpoint tests (real Claude API, no mocks) — unchanged
 ├── test_coaching.py       Phase 2 endpoint + pure-logic tests — unchanged
-├── test_rag.py             Phase 3 standalone RAG tests — unchanged
+├── test_rag.py             Phase 3 standalone RAG tests, plus list_documents() tests (§11)
 ├── test_rag_integration.py Phase 3 prompt-integration tests: deterministic prompt-construction
 │                            and fail-safe-retrieval tests, plus one real-Claude-call regression test
-└── test_jira.py            Jira module tests: pure parsing logic, in-memory store,
-                             monkeypatched-httpx OAuth/REST calls, endpoint tests, and
-                             deterministic related_issues prompt-wiring tests (see §12)
+├── test_knowledge_upload.py Upload endpoint tests, plus GET /api/knowledge/documents tests (§11)
+├── test_jira.py            Jira module tests: pure parsing logic, in-memory store,
+│                            monkeypatched-httpx OAuth/REST calls, endpoint tests, and
+│                            deterministic related_issues prompt-wiring tests (see §12)
+└── test_tickets.py         Reviewed-ticket history: in-memory store + endpoint tests (§13)
 
 scripts/
 └── rag_eval.py           manual, non-CI with-RAG vs. without-RAG comparison (not part of pytest)
 ```
 
-`auth/`, `database/`, and `tickets/` exist only as empty package stubs
-(`__init__.py` with zero content). No code has been written in any of them.
+`auth/` and `database/` exist only as empty package stubs (`__init__.py`
+with zero content) - no code has been written in either. `tickets/` now
+holds the reviewed-ticket history store (§13); `auth/` and `database/`
+remain untouched.
 `rag/` itself (chunking/embeddings/store/schemas) was not modified in this
 pass — the RAG integration lives entirely in
 `app/agent/rag_integration.py`, plus small additive changes to
@@ -309,12 +316,15 @@ global, `get_graph()`).
 | GET | `/api/jira/issues/{issue_key}` | `app/jira/router.py` | Full issue detail, including related-issue links |
 | GET | `/api/jira/issues/{issue_key}/links` | `app/jira/router.py` | Just the related-issue links for an issue |
 | POST | `/api/jira/issues/{issue_key}/update` | `app/jira/router.py` | Overwrite an issue's description with the finalized requirement (description only - see §12) |
+| POST | `/api/knowledge/upload` | `app/rag/router.py` | Ingest a company/project knowledge document (`document_type` optional, defaults to `general` - see §11) |
+| GET | `/api/knowledge/documents` | `app/rag/router.py` | List the distinct documents already stored for a `project_id` (one entry per document, not per chunk - see §11) |
+| POST | `/api/tickets/reviewed` | `app/tickets/router.py` | Record/upsert a reviewed ticket (see §13) |
+| GET | `/api/tickets/reviewed` | `app/tickets/router.py` | List reviewed tickets, most recently upserted first (see §13) |
 
 Endpoints listed in CLAUDE.md §24 that **do not exist yet**: `GET
 /api/coaching/{session_id}` and `POST /api/requirements/{id}/approve` -
 there is no separate persisted-approval endpoint (see §12 for how approval
-is enforced instead). `app/main.py` has a commented-out placeholder import
-for a `tickets_router` that is not yet built.
+is enforced instead).
 
 ## 8. Current state/persistence approach
 
@@ -333,9 +343,16 @@ for a `tickets_router` that is not yet built.
   SUITABLE FOR PRODUCTION", mirroring the coaching store's caveat. Supports
   exactly one Jira connection process-wide (there is no user concept to
   scope it by yet); does not survive a restart.
+- **Reviewed-ticket history**: a single process-local `list[ReviewedTicket]`
+  in `app/tickets/store.py` (`_REVIEWED_TICKETS`), upserted by `issue_key`
+  so re-recording the same ticket (e.g. after coaching finishes) updates
+  its entry instead of duplicating it. Same "TEMPORARY SCAFFOLDING - NOT
+  SUITABLE FOR PRODUCTION" caveat as the Jira connection store: survives a
+  frontend page refresh (the backend process keeps running) but not a
+  backend restart, and is not safe across multiple worker processes (§13).
 - **No auth**: `app/auth/` is an empty stub; there is no session/user
-  concept, so coaching sessions and the Jira connection are not scoped to
-  any user.
+  concept, so coaching sessions, the Jira connection, and the reviewed-
+  ticket history are not scoped to any user.
 
 ## 9. Configuration and external services
 
@@ -380,7 +397,7 @@ all methods and headers, credentials allowed.
 | Core AI analysis | **Implemented** | `app/analysis/`, `app/agent/`, `POST /api/analyse`, `tests/test_analysis.py` |
 | Readiness scoring | **Implemented** | 4-criterion scoring + Python-computed `overall_readiness` in `app/agent/graph.py`; deterministic stop/gap logic in `app/coaching/stop_condition.py` |
 | Coaching | **Implemented** | Full start → message → reanalyze → next → finalize loop in `app/coaching/`, covered by `tests/test_coaching.py` |
-| Frontend integration | **Partially implemented** | `frontend/` (React + Vite): `POST /api/analyse`, the full coaching loop (`/start`, `/message`, `/reanalyze`, `/next`, `/finalize`), the Jira connect/project/issue flow, and now the "Approve & Update Jira" action on the finalized-requirement view are wired to real backend calls. No persistence across page refresh (coaching state and Jira connection are both React/backend-in-memory only). |
+| Frontend integration | **Partially implemented** | `frontend/` (React + Vite): `POST /api/analyse`, the full coaching loop (`/start`, `/message`, `/reanalyze`, `/next`, `/finalize`), the Jira connect/project/issue flow, and now the "Approve & Update Jira" action on the finalized-requirement view are wired to real backend calls. `AppShell.tsx`'s login/nav state now persists to `sessionStorage` (§13) and reviewed-ticket history now lives in the backend (§13), so both survive a page refresh; an in-progress coaching session itself still does not (coaching state is backend-in-memory only, with no resume-by-`session_id` endpoint, and the Jira connection is still a single in-memory connection - both explicitly temporary, see §8). |
 | Jira integration | **Implemented** — OAuth (3LO) + read APIs, in-memory connection | `app/jira/`, `tests/test_jira.py`, frontend `JiraImportFlow` (see §12). `read:jira-work write:jira-work offline_access`; connection storage is explicitly temporary scaffolding (§8). |
 | RAG | **Implemented** — standalone module + API router + Jira-project-scoped prompt integration | `app/rag/`, `app/rag/router.py`, `app/agent/rag_integration.py`, `tests/test_rag.py`, `tests/test_rag_integration.py`, `tests/test_knowledge_upload.py`, `tests/test_knowledge_rag_e2e.py` — ingestion, embedding, retrieval, a knowledge-upload API router (`POST /api/knowledge/upload`), and analysis/coaching-finalize prompt integration are all implemented and tested. `TicketInput` now has a `project_id` field (see §11): for Jira-imported tickets it comes from the selected Jira project and is threaded into `retrieve_context_node`/`finalize_coaching_session`; **`TEMP_EVAL_PROJECT_ID = "default"`** remains only as the fallback for manually-entered tickets, which have no `project_id`. |
 | Jira update | **Implemented** — description only, explicit user confirmation required | `POST /api/jira/issues/{issue_key}/update` (`app/jira/router.py`), `app/jira/client.py::update_issue()`, frontend confirm step in `FinalRequirementView.tsx` (see §12). No custom fields, assignee, priority, status, or story points are touched. No separate persisted-approval endpoint (CLAUDE.md §24's `POST /api/requirements/{id}/approve`) - the confirm step itself is the approval gate. |
@@ -456,10 +473,34 @@ Key implementation details:
   `get_client()` singleton pattern already used for the Anthropic client.
 - `document_id` is caller-optional; `add_document()` generates a `uuid4` if
   none is supplied. Chunk ids are `f"{document_id}-{i}"`.
-- No document-management layer exists (no update/delete, no listing) —
-  only `add_document()` (create) and `retrieve()` (query), matching the
-  "do not build a complicated document management system" constraint.
-- An API router now exists: `app/rag/router.py` (`POST /api/knowledge/upload`).
+- No document-management layer exists (no update/delete) — only
+  `add_document()` (create), `retrieve()` (query), and now `list_documents()`
+  (list, see below). Still no update/delete, matching the "do not build a
+  complicated document management system" constraint.
+- An API router now exists: `app/rag/router.py`
+  (`POST /api/knowledge/upload`, `GET /api/knowledge/documents`).
+- `DocumentInput.document_type` is now **optional**, defaulting to
+  `DocumentType.GENERAL` (a new enum member) when the caller doesn't supply
+  one. The frontend's Knowledge panel no longer asks the user to categorize
+  an upload (`KnowledgeContextPanel.tsx` dropped its Company/Project scope
+  toggle and Document Type dropdown - see below); `document_type` itself is
+  untouched in storage/metadata, it just isn't a required user choice
+  anymore. `POST /api/knowledge/upload`'s `document_type` form field
+  changed from `Form(...)` to `Form(DocumentType.GENERAL)` accordingly.
+- `list_documents(project_id)` (`app/rag/store.py`) returns the **distinct
+  set of documents** already stored for a project - one `DocumentSummary`
+  {`document_id`, `title`, `document_type`} per document, not per chunk.
+  Implemented as `collection.get(where={"project_id": project_id})`
+  followed by de-duplication on `document_id` in Python (ChromaDB has no
+  native "distinct" query). Same `project_id`-required-and-filtered
+  invariant as `retrieve()` (raises `ValueError` for a blank `project_id`,
+  `RAGStoreError` on a ChromaDB read failure). Exposed via
+  `GET /api/knowledge/documents?project_id=...`, which
+  `frontend/src/hooks/useKnowledgeDocuments.ts` calls on mount so
+  `KnowledgeContextPanel.tsx` shows what's genuinely already stored for the
+  selected project instead of starting from an empty local list; the
+  upload mutation invalidates that query on success so a newly uploaded
+  document appears without a manual refresh.
 - `TicketInput` now has a `project_id` field (`app/analysis/schemas.py`). For
   Jira-imported tickets it's populated from the selected Jira project and
   threaded into retrieval via `app/agent/graph.py::retrieve_context_node`
@@ -862,3 +903,74 @@ introducing a mocking library dependency. Endpoint tests use `TestClient`
 the same way `tests/test_coaching.py` does. The `related_issues` prompt-
 wiring tests mirror `tests/test_rag_integration.py`'s
 `build_user_prompt()` coverage.
+
+## 13. Reviewed-ticket history and frontend session persistence
+
+Two small, targeted fixes for real end-to-end testing gaps, both reusing
+the existing in-memory-store/`sessionStorage` patterns rather than
+introducing any real persistence:
+
+**Reviewed-ticket history moved from frontend `useState` to a backend
+in-memory store.** Previously `AppShell.tsx` held `reviewedTickets` in
+React state, passed down to `DashboardPage`/`HistoryPage`/`ReviewTicketPage`
+as props - lost on every page refresh. Now:
+
+```
+ReviewTicketPage.tsx (after analysis)          CoachingPage.tsx (after finalize)
+        ↓                                              ↓
+useRecordReviewedTicket()  →  POST /api/tickets/reviewed  →  store.upsert_reviewed_ticket()
+                                                               app/tickets/store.py
+
+DashboardPage.tsx / HistoryPage.tsx (on mount)
+        ↓
+useReviewedTickets()  →  GET /api/tickets/reviewed  →  store.list_reviewed_tickets()
+```
+
+`app/tickets/store.py::_REVIEWED_TICKETS` mirrors `app/jira/store.py`'s
+shape (a process-local structure, no auth/user system to scope by yet) -
+same "TEMPORARY SCAFFOLDING - NOT SUITABLE FOR PRODUCTION" caveat, same
+upsert-by-key idea (`issue_key` here, vs. a single connection there).
+`AppShell.tsx` no longer holds or threads `reviewedTickets`/
+`onTicketReviewed` at all - `ReviewTicketPage`/`CoachingPage` each call
+`useRecordReviewedTicket()` directly, and `DashboardPage`/`HistoryPage`
+each call `useReviewedTickets()` directly, rather than receiving the list
+as a prop from a parent that no longer holds it.
+
+`frontend/src/lib/api/tickets.ts` keeps a private `ReviewedTicketWire`
+(snake_case) interface mirroring `app/tickets/schemas.py::ReviewedTicket`
+byte-for-byte, converting to/from the app's existing camelCase
+`ReviewedTicket` type (`frontend/src/lib/types/reviewedTicket.ts`, used
+untouched by `ReviewedTicketsTable.tsx`) at the API boundary - the same
+snake_case-wire-to-camelCase-app-state transform pattern already used by
+`useSubmitCoachingAnswer.ts`.
+
+**Login/nav state moved from plain `useState` to `sessionStorage`-backed
+state.** `AppShell.tsx`'s `isLoggedIn` and `activeScreen` used to reset on
+any full page reload - including the reload Jira's OAuth redirect causes
+when it lands back on the app after consent (`GET /jira/callback` responds
+with a `302` to `settings.frontend_url`, a real top-level navigation, not a
+fetch - see §12). That reload was silently bouncing a connected user back
+to the login screen. Both values are now read from `sessionStorage` on
+initial `useState`, and written back via a `useEffect` on every change:
+
+```ts
+const [isLoggedIn, setIsLoggedIn] = useState(readStoredIsLoggedIn);
+const [activeScreen, setActiveScreen] = useState<Screen>(readStoredScreen);
+useEffect(() => sessionStorage.setItem(IS_LOGGED_IN_KEY, String(isLoggedIn)), [isLoggedIn]);
+useEffect(() => sessionStorage.setItem(ACTIVE_SCREEN_KEY, activeScreen), [activeScreen]);
+```
+
+This is still not real authentication (CLAUDE.md §29/out-of-scope for this
+fix) - it only makes the existing cosmetic login state survive a same-tab
+reload it previously didn't. `sessionStorage` (not `localStorage`) is used
+deliberately: it clears when the tab closes, matching the "prototype demo,
+no real auth" framing already on `LoginPage.tsx`.
+
+### Tests: `tests/test_tickets.py`
+
+Follows `tests/test_jira.py`'s convention for a process-local store: an
+`autouse` fixture clears `app/tickets/store.py::_REVIEWED_TICKETS` before
+and after every test so state doesn't leak between tests, pure store
+functions (`upsert_reviewed_ticket`, `list_reviewed_tickets`) are tested
+directly with no HTTP involved, and endpoint tests use `TestClient` the
+same way `tests/test_jira.py`/`tests/test_coaching.py` do.

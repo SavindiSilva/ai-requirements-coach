@@ -18,7 +18,14 @@ import chromadb
 from app.core.config import settings
 from app.rag.chunking import chunk_text
 from app.rag.embeddings import embed_text, embed_texts
-from app.rag.schemas import ChunkMetadata, DocumentInput, DocumentType, IngestResult, RetrievedChunk
+from app.rag.schemas import (
+    ChunkMetadata,
+    DocumentInput,
+    DocumentSummary,
+    DocumentType,
+    IngestResult,
+    RetrievedChunk,
+)
 
 COLLECTION_NAME = "project_documents"
 DEFAULT_TOP_K = 5
@@ -119,3 +126,33 @@ def retrieve(
         RetrievedChunk(text=text, metadata=ChunkMetadata.model_validate(metadata), distance=distance)
         for text, metadata, distance in zip(documents, metadatas, distances)
     ]
+
+
+def list_documents(project_id: str) -> list[DocumentSummary]:
+    """Return the distinct set of documents already stored under project_id.
+
+    One entry per document_id (not one per chunk) - a document's title and
+    document_type are taken from whichever of its chunks is seen first,
+    since every chunk of the same document carries identical values for
+    both. Raises ValueError for a blank project_id, or RAGStoreError if the
+    ChromaDB read fails.
+    """
+    if not project_id or not project_id.strip():
+        raise ValueError("project_id is required")
+
+    try:
+        results = get_collection().get(where={"project_id": project_id})
+    except Exception as exc:
+        raise RAGStoreError(f"Failed to list documents from ChromaDB: {exc}") from exc
+
+    documents: dict[str, DocumentSummary] = {}
+    for metadata in results.get("metadatas") or []:
+        document_id = metadata.get("document_id")
+        if document_id and document_id not in documents:
+            documents[document_id] = DocumentSummary(
+                document_id=document_id,
+                title=metadata.get("title", ""),
+                document_type=metadata.get("document_type", DocumentType.GENERAL.value),
+            )
+
+    return list(documents.values())

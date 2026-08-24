@@ -2,15 +2,16 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { ReviewedTicketsTable } from '../components/tickets/ReviewedTicketsTable';
 import { formatScore } from '../lib/format';
-import type { ReviewedTicket } from '../lib/types/reviewedTicket';
+import { useReviewedTickets } from '../hooks/useReviewedTickets';
 
 interface DashboardPageProps {
-  reviewedTickets: ReviewedTicket[];
   onStartReview: () => void;
   onViewHistory: () => void;
 }
 
-export function DashboardPage({ reviewedTickets, onStartReview, onViewHistory }: DashboardPageProps) {
+export function DashboardPage({ onStartReview, onViewHistory }: DashboardPageProps) {
+  const reviewedTicketsQuery = useReviewedTickets();
+  const reviewedTickets = reviewedTicketsQuery.data ?? [];
   const ticketsReviewed = reviewedTickets.length;
   const averageReadinessLabel =
     ticketsReviewed > 0
@@ -58,9 +59,12 @@ export function DashboardPage({ reviewedTickets, onStartReview, onViewHistory }:
           View all
         </button>
       </div>
-      <ReviewedTicketsTable reviewedTickets={reviewedTickets} />
+      <ReviewedTicketsTable
+        reviewedTickets={reviewedTickets}
+        emptyMessage={reviewedTicketsQuery.isLoading ? 'Loading…' : 'No tickets reviewed yet.'}
+      />
       <p className="mt-3 text-xs text-[color-mix(in_srgb,var(--color-text)_35%,transparent)]">
-        Stats reset when you refresh the page.
+        This history is stored on the backend server, so it survives a page refresh.
       </p>
     </div>
   );

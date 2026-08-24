@@ -30,7 +30,7 @@ from app.rag import embeddings as embeddings_module
 from app.rag.chunking import chunk_text
 from app.rag.embeddings import EmbeddingError, embed_texts
 from app.rag.schemas import DocumentInput, DocumentType
-from app.rag.store import RAGStoreError, add_document, get_collection, retrieve
+from app.rag.store import RAGStoreError, add_document, get_collection, list_documents, retrieve
 
 requires_openai = pytest.mark.skipif(
     not settings.openai_api_key,
@@ -77,6 +77,19 @@ def test_chunk_text_invalid_chunk_size_raises_value_error():
 
 
 # --- input validation (pure, always runs) -------------------------------
+
+
+def test_document_input_defaults_document_type_to_general_when_omitted():
+    document = DocumentInput(project_id="proj-1", title="Untyped", text="Some notes.")
+    assert document.document_type == DocumentType.GENERAL
+
+
+def test_list_documents_requires_non_blank_project_id():
+    with pytest.raises(ValueError):
+        list_documents("")
+
+    with pytest.raises(ValueError):
+        list_documents("   ")
 
 
 def test_document_input_rejects_empty_text():
@@ -222,6 +235,45 @@ def test_retrieve_metadata_is_preserved():
     assert chunk.metadata.document_type == DocumentType.ENGINEERING_GUIDELINE
     assert chunk.metadata.title == "Coding Standards"
     assert chunk.metadata.chunk_index == 0
+
+
+@requires_openai
+def test_list_documents_returns_one_entry_per_document_not_per_chunk():
+    project_id = f"test-{uuid.uuid4()}"
+    long_text = " ".join(f"word{i}" for i in range(450))  # chunks into 3 pieces
+    result = add_document(
+        DocumentInput(
+            project_id=project_id,
+            document_type=DocumentType.ENGINEERING_GUIDELINE,
+            title="Multi-chunk Guideline",
+            text=long_text,
+        )
+    )
+    assert result.chunk_count > 1  # sanity check the fixture actually spans multiple chunks
+
+    documents = list_documents(project_id)
+
+    assert len(documents) == 1
+    assert documents[0].document_id == result.document_id
+    assert documents[0].title == "Multi-chunk Guideline"
+    assert documents[0].document_type == DocumentType.ENGINEERING_GUIDELINE
+
+
+@requires_openai
+def test_list_documents_only_includes_the_requested_project():
+    project_a = f"test-{uuid.uuid4()}"
+    project_b = f"test-{uuid.uuid4()}"
+
+    add_document(
+        DocumentInput(project_id=project_a, title="Project A doc", text="Project A guideline text.")
+    )
+    add_document(
+        DocumentInput(project_id=project_b, title="Project B doc", text="Project B guideline text.")
+    )
+
+    documents = list_documents(project_b)
+
+    assert [doc.title for doc in documents] == ["Project B doc"]
 
 
 @requires_openai

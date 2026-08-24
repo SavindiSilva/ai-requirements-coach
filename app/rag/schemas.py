@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 
 class DocumentType(str, Enum):
+    GENERAL = "general"
     DEFINITION_OF_READY = "definition_of_ready"
     ENGINEERING_GUIDELINE = "engineering_guideline"
     SECURITY_GUIDELINE = "security_guideline"
@@ -22,7 +23,10 @@ class DocumentType(str, Enum):
 
 class DocumentInput(BaseModel):
     project_id: str = Field(..., min_length=1)
-    document_type: DocumentType
+    document_type: DocumentType = Field(
+        default=DocumentType.GENERAL,
+        description="Optional. Defaults to GENERAL when the caller doesn't categorize the upload.",
+    )
     title: str = Field(..., min_length=1)
     text: str = Field(..., min_length=1)
 
@@ -44,3 +48,15 @@ class RetrievedChunk(BaseModel):
     text: str
     metadata: ChunkMetadata
     distance: float = Field(..., description="Vector distance from the query (lower is more relevant).")
+
+
+class DocumentSummary(BaseModel):
+    """One entry per distinct uploaded document (not one per chunk).
+
+    Returned by GET /api/knowledge/documents so a project's Knowledge panel
+    can show what's already stored without keeping its own local list.
+    """
+
+    document_id: str
+    title: str
+    document_type: DocumentType

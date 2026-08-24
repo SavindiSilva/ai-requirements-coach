@@ -4,17 +4,17 @@ import { JiraImportFlow } from '../components/jira/JiraImportFlow';
 import { CoachingPage } from './CoachingPage';
 import { useAnalyseTicket } from '../hooks/useAnalyseTicket';
 import { useStartCoaching } from '../hooks/useStartCoaching';
+import { useRecordReviewedTicket } from '../hooks/useRecordReviewedTicket';
 import { ApiError } from '../lib/api/client';
-import type { ReviewedTicket } from '../lib/types/reviewedTicket';
 
 interface ReviewTicketPageProps {
-  onTicketReviewed: (ticket: ReviewedTicket) => void;
   onFinishReview: () => void;
 }
 
-export function ReviewTicketPage({ onTicketReviewed, onFinishReview }: ReviewTicketPageProps) {
+export function ReviewTicketPage({ onFinishReview }: ReviewTicketPageProps) {
   const mutation = useAnalyseTicket();
   const coachingMutation = useStartCoaching();
+  const recordReviewedTicketMutation = useRecordReviewedTicket();
 
   const submittedTicket = mutation.data ? mutation.variables : undefined;
 
@@ -34,7 +34,6 @@ export function ReviewTicketPage({ onTicketReviewed, onFinishReview }: ReviewTic
         ticket={submittedTicket}
         coaching={coachingMutation.data}
         onBackToJira={handleBackToJira}
-        onTicketReviewed={onTicketReviewed}
       />
     );
   }
@@ -48,20 +47,19 @@ export function ReviewTicketPage({ onTicketReviewed, onFinishReview }: ReviewTic
             Review Another Ticket
           </Button>
         </div>
-        <AnalysisResultView ticket={submittedTicket} result={mutation.data} />
-
-        <div className="mt-6 flex flex-col items-start gap-3">
-          {coachingMutation.isError && (
-            <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-3.5 py-3 text-sm text-[var(--color-danger)]">
-              {coachingMutation.error instanceof ApiError
+        <AnalysisResultView
+          ticket={submittedTicket}
+          result={mutation.data}
+          onStartCoaching={handleStartCoaching}
+          isStartingCoaching={coachingMutation.isPending}
+          startCoachingErrorMessage={
+            coachingMutation.isError
+              ? coachingMutation.error instanceof ApiError
                 ? coachingMutation.error.message
-                : 'Something went wrong. Please try again.'}
-            </div>
-          )}
-          <Button onClick={handleStartCoaching} disabled={coachingMutation.isPending}>
-            {coachingMutation.isPending ? 'Starting…' : 'Start AI Coaching'}
-          </Button>
-        </div>
+                : 'Something went wrong. Please try again.'
+              : null
+          }
+        />
       </div>
     );
   }
@@ -78,7 +76,7 @@ export function ReviewTicketPage({ onTicketReviewed, onFinishReview }: ReviewTic
           onTicketReady={(ticket) =>
             mutation.mutate(ticket, {
               onSuccess: (result) =>
-                onTicketReviewed({
+                recordReviewedTicketMutation.mutate({
                   issueKey: ticket.source_issue_key ?? undefined,
                   title: ticket.title,
                   readiness: result.overall_readiness,

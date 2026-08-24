@@ -7,8 +7,11 @@ chunk/embed/store pipeline already covered by tests/test_rag.py. This
 router introduces no second ingestion path; it is a thin HTTP adapter in
 front of add_document().
 
-Mounted at /api/knowledge in app/main.py, so the one route here is
-POST /api/knowledge/upload.
+Mounted at /api/knowledge in app/main.py: POST /api/knowledge/upload
+ingests a document, GET /api/knowledge/documents lists what's already
+stored for a project (one entry per document, not per chunk) so the
+frontend's Knowledge panel can show existing uploads instead of starting
+from an empty local list.
 
 No auth: the application has no auth system yet (app/auth/ is an empty
 stub) - consistent with every other router in this codebase (see
@@ -18,6 +21,10 @@ project_id is accepted as an explicit required form field, not defaulted
 to app/agent/rag_integration.py's TEMP_EVAL_PROJECT_ID - CLAUDE.md section 7
 is explicit that the "default" hardcode must not be extended to new
 features.
+
+document_type is optional on upload (defaults to DocumentType.GENERAL) -
+the frontend no longer asks the user to categorize a document before
+uploading it; the field itself is untouched in storage/metadata.
 """
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -25,8 +32,8 @@ from pydantic import ValidationError
 
 from app.rag.embeddings import EmbeddingError
 from app.rag.extraction import ExtractionError, UnsupportedFileTypeError, extract_text
-from app.rag.schemas import DocumentInput, DocumentType, IngestResult
-from app.rag.store import RAGStoreError, add_document
+from app.rag.schemas import DocumentInput, DocumentSummary, DocumentType, IngestResult
+from app.rag.store import RAGStoreError, add_document, list_documents
 
 router = APIRouter()
 
@@ -37,7 +44,7 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 async def upload_knowledge_document(
     file: UploadFile = File(...),
     project_id: str = Form(...),
-    document_type: DocumentType = Form(...),
+    document_type: DocumentType = Form(DocumentType.GENERAL),
     title: str | None = Form(None),
 ) -> IngestResult:
     content = await file.read()
@@ -71,5 +78,15 @@ async def upload_knowledge_document(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except EmbeddingError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except RAGStoreError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.get("/documents", response_model=list[DocumentSummary])
+def get_knowledge_documents(project_id: str) -> list[DocumentSummary]:
+    try:
+        return list_documents(project_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RAGStoreError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

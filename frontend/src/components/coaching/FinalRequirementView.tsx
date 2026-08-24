@@ -24,6 +24,7 @@ const CRITERIA: { key: keyof CurrentScores; label: string }[] = [
 export function FinalRequirementView({ result, ticket, onBackToJira }: FinalRequirementViewProps) {
   const { final_requirement } = result;
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const updateMutation = useUpdateJiraIssue();
 
   const issueKey = ticket.source_issue_key;
@@ -35,38 +36,73 @@ export function FinalRequirementView({ result, ticket, onBackToJira }: FinalRequ
 
   return (
     <div className="flex flex-col gap-6">
-      <Card className="p-5">
-        <h2 className="mb-2 text-base font-medium">Development-Ready Requirement</h2>
-        <p className="text-[15px] leading-relaxed">{final_requirement.user_story}</p>
-      </Card>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Card className="p-5">
+          <div className="mb-2 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
+            Original
+          </div>
+          <h3 className="mb-1.5 text-sm font-medium">{ticket.title}</h3>
+          <p className="text-sm leading-relaxed text-[color-mix(in_srgb,var(--color-text)_65%,transparent)]">
+            {ticket.description}
+          </p>
+        </Card>
+
+        <Card className="border border-[var(--color-accent)] p-5">
+          <div className="mb-2 text-[10.5px] tracking-wide text-[var(--color-accent-300)] uppercase">
+            Improved
+          </div>
+          <p className="text-[15px] leading-relaxed">{final_requirement.user_story}</p>
+        </Card>
+      </div>
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
         <FindingList title="Acceptance Criteria" items={final_requirement.acceptance_criteria} />
         <FindingList title="Scope" items={final_requirement.scope} />
-        <FindingList title="Assumptions" items={final_requirement.assumptions} />
-        <FindingList title="Dependencies" items={final_requirement.dependencies} />
-        <FindingList
-          title="Remaining Gaps"
-          items={result.remaining_gaps}
-          emptyLabel="None — all criteria meet the readiness threshold."
-        />
       </div>
 
-      <Card className="p-5">
-        <div className="mb-2 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
-          Current Readiness
-        </div>
-        <div className="flex flex-col gap-1.5">
-          {CRITERIA.map(({ key, label }) => (
-            <div key={key} className="flex items-center gap-2.5">
-              <ScoreBadge score={result.current_scores[key]} />
-              <span className="text-xs text-[color-mix(in_srgb,var(--color-text)_65%,transparent)]">
-                {label}
-              </span>
-            </div>
-          ))}
-        </div>
+      <Card className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3">
+        <span className="text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
+          Readiness
+        </span>
+        {CRITERIA.map(({ key, label }) => (
+          <span key={key} className="flex items-center gap-1.5">
+            <ScoreBadge score={result.current_scores[key]} />
+            <span className="text-xs text-[color-mix(in_srgb,var(--color-text)_65%,transparent)]">{label}</span>
+          </span>
+        ))}
       </Card>
+
+      <button
+        type="button"
+        onClick={() => setShowDetails((v) => !v)}
+        aria-expanded={showDetails}
+        className="inline-flex w-max cursor-pointer items-center gap-1.5 text-sm text-[var(--color-accent)] hover:underline"
+      >
+        {showDetails ? 'Hide details' : 'Show details'}
+        <svg
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={`h-3.5 w-3.5 transition-transform duration-150 ${showDetails ? 'rotate-180' : ''}`}
+        >
+          <path d="M5 7.5L10 12.5L15 7.5" />
+        </svg>
+      </button>
+
+      {showDetails && (
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <FindingList title="Assumptions" items={final_requirement.assumptions} />
+          <FindingList title="Dependencies" items={final_requirement.dependencies} />
+          <FindingList
+            title="Remaining Gaps"
+            items={result.remaining_gaps}
+            emptyLabel="None — all criteria meet the readiness threshold."
+          />
+        </div>
+      )}
 
       {issueKey && (
         <Card className="p-5">

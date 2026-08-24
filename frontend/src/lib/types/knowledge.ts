@@ -2,6 +2,7 @@
 // backend doesn't actually return.
 
 export type DocumentType =
+  | 'general'
   | 'definition_of_ready'
   | 'engineering_guideline'
   | 'security_guideline'
@@ -14,25 +15,8 @@ export interface IngestResult {
   chunk_count: number;
 }
 
-export type KnowledgeScope = 'company' | 'project';
-
-interface DocumentTypeOption {
-  value: DocumentType;
-  label: string;
+export interface DocumentSummary {
+  document_id: string;
+  title: string;
+  document_type: DocumentType;
 }
-
-// CLAUDE.md section 18: Company-level (Definition of Ready, Security
-// guidelines, Engineering standards) vs Project-level (Project
-// requirements, Architecture guidelines, Product/notification rules).
-export const DOCUMENT_TYPES_BY_SCOPE: Record<KnowledgeScope, DocumentTypeOption[]> = {
-  company: [
-    { value: 'definition_of_ready', label: 'Definition of Ready' },
-    { value: 'security_guideline', label: 'Security Guideline' },
-    { value: 'engineering_guideline', label: 'Engineering Guideline' },
-  ],
-  project: [
-    { value: 'project_requirement', label: 'Project Requirement' },
-    { value: 'architecture_guideline', label: 'Architecture Guideline' },
-    { value: 'product_rule', label: 'Product / Notification Rule' },
-  ],
-};

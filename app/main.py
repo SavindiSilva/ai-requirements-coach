@@ -68,6 +68,6 @@ from app.rag.router import router as knowledge_router
 
 app.include_router(knowledge_router, prefix="/api/knowledge", tags=["knowledge"])
 
-# from app.tickets.router import router as tickets_router
-#
-# app.include_router(tickets_router, prefix="/tickets", tags=["tickets"])
+from app.tickets.router import router as tickets_router
+
+app.include_router(tickets_router, prefix="/api/tickets", tags=["tickets"])

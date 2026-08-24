@@ -1,14 +1,17 @@
 import { useMemo, useState } from 'react';
 import { ReviewedTicketsTable } from '../components/tickets/ReviewedTicketsTable';
 import { fieldInputClasses } from '../lib/fieldStyles';
+import { useReviewedTickets } from '../hooks/useReviewedTickets';
 import type { ReviewedTicket } from '../lib/types/reviewedTicket';
 
-interface HistoryPageProps {
-  reviewedTickets: ReviewedTicket[];
-}
+// Stable reference so useMemo below doesn't see a "new" dependency on every
+// render while the query has no data yet.
+const EMPTY_TICKETS: ReviewedTicket[] = [];
 
-export function HistoryPage({ reviewedTickets }: HistoryPageProps) {
+export function HistoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
+  const reviewedTicketsQuery = useReviewedTickets();
+  const reviewedTickets = reviewedTicketsQuery.data ?? EMPTY_TICKETS;
 
   const filteredTickets = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -22,7 +25,7 @@ export function HistoryPage({ reviewedTickets }: HistoryPageProps) {
     <div className="mx-auto max-w-3xl px-6 py-10">
       <h1 className="mb-1.5 text-2xl font-medium">History</h1>
       <p className="mb-6 text-sm text-[color-mix(in_srgb,var(--color-text)_55%,transparent)]">
-        Every ticket you've reviewed this session, most recent first.
+        Every ticket you've reviewed, most recent first.
       </p>
 
       <input
@@ -35,13 +38,15 @@ export function HistoryPage({ reviewedTickets }: HistoryPageProps) {
       <ReviewedTicketsTable
         reviewedTickets={filteredTickets}
         emptyMessage={
-          reviewedTickets.length === 0
-            ? 'No tickets reviewed yet this session.'
-            : 'No tickets match your search.'
+          reviewedTicketsQuery.isLoading
+            ? 'Loading…'
+            : reviewedTickets.length === 0
+              ? 'No tickets reviewed yet.'
+              : 'No tickets match your search.'
         }
       />
       <p className="mt-3 text-xs text-[color-mix(in_srgb,var(--color-text)_35%,transparent)]">
-        This list resets when you refresh the page.
+        This history is stored on the backend server, so it survives a page refresh.
       </p>
     </div>
   );
