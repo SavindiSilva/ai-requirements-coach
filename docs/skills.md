@@ -368,3 +368,34 @@ survive a new tab/device/backend restart":
 - This is a plain browser API, not a new dependency or abstraction — don't
   reach for a state-management library or a backend session endpoint for
   something that's explicitly scoped to "one tab, until it's closed."
+
+## 11. Lightweight local persistence with stdlib `sqlite3`
+
+`app/tickets/store.py` (docs/architecture.md §13) is the reference example
+for giving a single process-local store real (restart-surviving)
+persistence without pulling in Postgres/Supabase/SQLAlchemy. Reach for
+this shape when a store needs to survive a backend restart but doesn't
+need a shared/multi-process database — CLAUDE.md §21's Postgres-via-
+Supabase is still the answer for anything that does:
+
+- Use the stdlib `sqlite3` module directly against one local file (a
+  module-level `DB_PATH: Path`, gitignored) — no ORM, no new dependency.
+  Open and close a connection per call (`_connect()` /
+  `conn.close()` in a `try`/`finally`); don't hold one open across calls.
+- Expose an `init_db()` that runs `CREATE TABLE IF NOT EXISTS` and is safe
+  to call every time the app starts — call it from a `startup` event in
+  `app/main.py` (`@app.on_event("startup")`), not at import time, so tests
+  can point `DB_PATH` at a temp file before the table is created.
+- Keep the module's existing public function signatures unchanged when
+  swapping an in-memory store for this — callers (routers, other modules)
+  shouldn't need to change at all.
+- Tests: point `store.DB_PATH` at a fresh file under pytest's per-test
+  `tmp_path` via an `autouse` fixture using `monkeypatch.setattr`, then
+  call `init_db()` before each test. This isolates every test into its own
+  database file and never touches the real data file, without needing
+  manual cleanup (`monkeypatch` reverts `DB_PATH`, and `tmp_path` is
+  cleaned up by pytest).
+- This is still process-local in the sense that concurrent writes from
+  multiple worker processes aren't safe — it solves "survives a restart,"
+  not "safe for horizontal scaling." Document that limitation in the
+  module docstring, same as the in-memory stores it replaces.

@@ -1,9 +1,11 @@
 """Tests for the reviewed-ticket history (app/tickets/).
 
-Follows the same conventions as tests/test_jira.py for its in-memory
-store: a fixture resets the process-local list before/after every test
-(this module-level state would otherwise leak between tests), and endpoint
-tests use FastAPI's TestClient against the real app.
+The store is SQLite-backed (app/tickets/store.py). An autouse fixture
+points `store.DB_PATH` at a fresh file under pytest's per-test `tmp_path`
+and initializes its table before every test, so tests never touch the real
+`data/tickets.db` and don't leak state between tests (each test gets its
+own file; `monkeypatch` restores `DB_PATH` afterward). Endpoint tests use
+FastAPI's TestClient against the real app.
 """
 
 import pytest
@@ -17,10 +19,10 @@ client_app = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
-def _reset_tickets_store():
-    store._REVIEWED_TICKETS.clear()
+def _reset_tickets_store(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "DB_PATH", tmp_path / "test_tickets.db")
+    store.init_db()
     yield
-    store._REVIEWED_TICKETS.clear()
 
 
 def _make_ticket(issue_key: str | None = "PROJ-1", **overrides) -> ReviewedTicket:

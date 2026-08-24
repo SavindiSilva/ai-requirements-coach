@@ -87,9 +87,9 @@ app/
 │   └── state.py           JiraConnectionState TypedDict
 ├── auth/                empty (__init__.py only) — not started
 ├── database/            empty (__init__.py only) — not started
-└── tickets/             reviewed-ticket history (TEMPORARY in-memory store, see §13)
+└── tickets/             reviewed-ticket history, SQLite-backed (see §13)
     ├── router.py          POST/GET /api/tickets/reviewed
-    ├── store.py           TEMPORARY in-memory list + upsert-by-issue_key
+    ├── store.py           sqlite3-backed (data/tickets.db) + upsert-by-issue_key
     └── schemas.py         ReviewedTicket
 
 tests/
@@ -328,8 +328,11 @@ is enforced instead).
 
 ## 8. Current state/persistence approach
 
-- **No database.** `app/database/` is an empty stub; no SQLAlchemy models,
-  no Supabase client usage, no connection pooling anywhere in the code.
+- **No SQLAlchemy/Supabase database.** `app/database/` is an empty stub; no
+  SQLAlchemy models, no Supabase client usage, no connection pooling
+  anywhere in the code. The reviewed-ticket history (below) uses Python's
+  built-in `sqlite3` directly against a local file — a deliberately minimal
+  exception, not a general persistence layer.
 - **Coaching sessions**: a single process-local `dict[str,
   CoachingSessionState]` in `app/coaching/store.py` (`_SESSIONS`). Explicitly
   documented in that module's docstring as a temporary placeholder — "does
@@ -343,13 +346,14 @@ is enforced instead).
   SUITABLE FOR PRODUCTION", mirroring the coaching store's caveat. Supports
   exactly one Jira connection process-wide (there is no user concept to
   scope it by yet); does not survive a restart.
-- **Reviewed-ticket history**: a single process-local `list[ReviewedTicket]`
-  in `app/tickets/store.py` (`_REVIEWED_TICKETS`), upserted by `issue_key`
-  so re-recording the same ticket (e.g. after coaching finishes) updates
-  its entry instead of duplicating it. Same "TEMPORARY SCAFFOLDING - NOT
-  SUITABLE FOR PRODUCTION" caveat as the Jira connection store: survives a
-  frontend page refresh (the backend process keeps running) but not a
-  backend restart, and is not safe across multiple worker processes (§13).
+- **Reviewed-ticket history**: SQLite-backed (`app/tickets/store.py`,
+  `DB_PATH` = `data/tickets.db`, gitignored), upserted by `issue_key` so
+  re-recording the same ticket (e.g. after coaching finishes) updates its
+  row instead of duplicating it. Unlike the coaching/Jira-connection
+  stores, this one does survive a backend restart — the only persistence
+  in the app besides the RAG vector store (§13). Still not safe across
+  multiple worker processes writing concurrently, and still unscoped by
+  user (no auth system yet).
 - **No auth**: `app/auth/` is an empty stub; there is no session/user
   concept, so coaching sessions, the Jira connection, and the reviewed-
   ticket history are not scoped to any user.
@@ -926,10 +930,17 @@ DashboardPage.tsx / HistoryPage.tsx (on mount)
 useReviewedTickets()  →  GET /api/tickets/reviewed  →  store.list_reviewed_tickets()
 ```
 
-`app/tickets/store.py::_REVIEWED_TICKETS` mirrors `app/jira/store.py`'s
-shape (a process-local structure, no auth/user system to scope by yet) -
-same "TEMPORARY SCAFFOLDING - NOT SUITABLE FOR PRODUCTION" caveat, same
-upsert-by-key idea (`issue_key` here, vs. a single connection there).
+`app/tickets/store.py` persists to a local SQLite file (`DB_PATH`, default
+`data/tickets.db`, gitignored) via the stdlib `sqlite3` module — a single
+`reviewed_tickets` table, one row per ticket, upserted by deleting any
+existing row with the same `issue_key` before inserting (mirroring
+`app/jira/store.py`'s upsert-by-key idea, but persisted rather than
+process-local). `init_db()` creates the table if missing and is called
+from a `startup` event in `app/main.py`, so a fresh `data/tickets.db` is
+safe to create on every boot. Unlike the coaching/Jira-connection stores,
+this survives a backend restart, not just a frontend page refresh. Still
+no auth/user system to scope rows by, and still not safe for concurrent
+writes from multiple worker processes.
 `AppShell.tsx` no longer holds or threads `reviewedTickets`/
 `onTicketReviewed` at all - `ReviewTicketPage`/`CoachingPage` each call
 `useRecordReviewedTicket()` directly, and `DashboardPage`/`HistoryPage`
@@ -968,9 +979,10 @@ no real auth" framing already on `LoginPage.tsx`.
 
 ### Tests: `tests/test_tickets.py`
 
-Follows `tests/test_jira.py`'s convention for a process-local store: an
-`autouse` fixture clears `app/tickets/store.py::_REVIEWED_TICKETS` before
-and after every test so state doesn't leak between tests, pure store
+An `autouse` fixture points `store.DB_PATH` at a fresh file under
+pytest's per-test `tmp_path` and calls `store.init_db()` before every
+test (`monkeypatch` restores `DB_PATH` afterward), so tests never touch
+the real `data/tickets.db` and don't leak state between tests. Pure store
 functions (`upsert_reviewed_ticket`, `list_reviewed_tickets`) are tested
 directly with no HTTP involved, and endpoint tests use `TestClient` the
 same way `tests/test_jira.py`/`tests/test_coaching.py` do.

@@ -69,5 +69,12 @@ from app.rag.router import router as knowledge_router
 app.include_router(knowledge_router, prefix="/api/knowledge", tags=["knowledge"])
 
 from app.tickets.router import router as tickets_router
+from app.tickets.store import init_db as _init_tickets_db
 
 app.include_router(tickets_router, prefix="/api/tickets", tags=["tickets"])
+
+
+@app.on_event("startup")
+def _init_tickets_store() -> None:
+    """Create data/tickets.db and its table if they don't already exist."""
+    _init_tickets_db()

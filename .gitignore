@@ -4,5 +4,6 @@ __pycache__/
 .venv/
 venv/
 chroma_data/
+data/
 .DS_Store
 *.egg-info/
