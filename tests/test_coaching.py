@@ -15,6 +15,7 @@ start -> message flow, as required by the Phase 2B spec.
 
 from app.agent.llm import LLMAnalysisError
 from app.analysis.schemas import AnalysisResult, CriterionScore, TicketInput
+from app.coaching.llm import FINAL_REQUIREMENT_TOOL_NAME, normalize_final_requirement_input
 from app.coaching.schemas import ClarificationQuestionOutput, FinalRequirementContent
 from app.coaching.selection import select_weakest_criterion
 from app.coaching.store import create_session, get_session, record_answer
@@ -538,7 +539,7 @@ def test_coaching_finalize_readiness_threshold_met(monkeypatch):
 
     call_count = {"n": 0}
 
-    def _fake_generate(system_prompt, user_prompt):
+    def _fake_generate(system_prompt, user_prompt, **kwargs):
         call_count["n"] += 1
         return _SAMPLE_FINAL_REQUIREMENT
 
@@ -570,7 +571,7 @@ def test_coaching_finalize_max_questions_reached_with_remaining_gaps(monkeypatch
     analysis = _make_analysis(rc=2, ac=0, oq=2, sd=1)
     session_id = _create_completed_session(analysis, "max_questions_reached", question_count=5)
 
-    def _fake_generate(system_prompt, user_prompt):
+    def _fake_generate(system_prompt, user_prompt, **kwargs):
         return _SAMPLE_FINAL_REQUIREMENT
 
     monkeypatch.setattr("app.coaching.router.generate_final_requirement", _fake_generate)
@@ -663,7 +664,7 @@ def test_coaching_finalize_prompt_receives_complete_context(monkeypatch):
         captured["stop_reason"] = stop_reason
         return "irrelevant prompt text"
 
-    def _fake_generate(system_prompt, user_prompt):
+    def _fake_generate(system_prompt, user_prompt, **kwargs):
         return _SAMPLE_FINAL_REQUIREMENT
 
     monkeypatch.setattr("app.coaching.router.build_finalize_user_prompt", _spy_build_user_prompt)
@@ -692,7 +693,7 @@ def test_coaching_finalize_structured_output_matches_schema(monkeypatch):
         dependencies=[],
     )
 
-    def _fake_generate(system_prompt, user_prompt):
+    def _fake_generate(system_prompt, user_prompt, **kwargs):
         return mocked_output
 
     monkeypatch.setattr("app.coaching.router.generate_final_requirement", _fake_generate)
@@ -710,3 +711,168 @@ def test_coaching_finalize_structured_output_matches_schema(monkeypatch):
     }
     session = get_session(session_id)
     assert session["final_requirement"] == mocked_output
+
+
+# --- Phase 2E robustness: normalize_final_requirement_input coercion ---
+#
+# Claude occasionally returns a malformed submit_final_requirement call for a
+# genuinely under-informative coaching outcome (max_questions_reached with
+# consistently vague answers) - observed in production as a list-typed field
+# collapsed into a single string, with user_story omitted entirely.
+# normalize_final_requirement_input() is pure and LLM-free, so it's tested
+# directly here with hand-built malformed dicts, no real Claude call needed -
+# same convention as select_weakest_criterion/should_stop_coaching.
+
+
+def test_normalize_final_requirement_input_wraps_string_list_field(caplog):
+    raw = {
+        "user_story": "As a user, I want X so that Y.",
+        "acceptance_criteria": "Given a Jira issue is created, when ..., then ...",
+        "scope": [],
+        "assumptions": [],
+        "dependencies": [],
+    }
+
+    with caplog.at_level("WARNING"):
+        result = normalize_final_requirement_input(
+            raw, ticket_title="Add Slack notifications", session_id="sess-1"
+        )
+
+    assert result["acceptance_criteria"] == ["Given a Jira issue is created, when ..., then ..."]
+    assert result["user_story"] == raw["user_story"]  # untouched, already valid
+    assert any(
+        "acceptance_criteria" in r.message and "sess-1" in r.message for r in caplog.records
+    )
+
+
+def test_normalize_final_requirement_input_synthesizes_missing_user_story(caplog):
+    raw = {
+        "acceptance_criteria": ["Some criterion."],
+        "scope": [],
+        "assumptions": [],
+        "dependencies": [],
+    }
+
+    with caplog.at_level("WARNING"):
+        result = normalize_final_requirement_input(
+            raw, ticket_title="Add Slack notifications", session_id="sess-2"
+        )
+
+    assert "Add Slack notifications" in result["user_story"]
+    assert result["acceptance_criteria"] == ["Some criterion."]  # untouched, already a list
+    assert any("user_story" in r.message and "sess-2" in r.message for r in caplog.records)
+
+
+def test_normalize_final_requirement_input_synthesizes_blank_user_story():
+    raw = {"user_story": "   ", "acceptance_criteria": []}
+    result = normalize_final_requirement_input(raw, ticket_title="Fix the thing", session_id="sess-3")
+    assert result["user_story"] != "   "
+    assert "Fix the thing" in result["user_story"]
+
+
+def test_normalize_final_requirement_input_recovers_both_malformed_fields_at_once(caplog):
+    # Mirrors the actual production failure: only acceptance_criteria
+    # present, as a string, and user_story entirely absent from the dict.
+    raw = {"acceptance_criteria": "Given a Jira issue is successfully created, ...(truncated)"}
+
+    with caplog.at_level("WARNING"):
+        result = normalize_final_requirement_input(
+            raw, ticket_title="Add Slack notifications", session_id="sess-4"
+        )
+
+    normalized = FinalRequirementContent.model_validate(result)
+    assert normalized.acceptance_criteria == ["Given a Jira issue is successfully created, ...(truncated)"]
+    assert normalized.scope == []
+    assert normalized.assumptions == []
+    assert normalized.dependencies == []
+    assert "Add Slack notifications" in normalized.user_story
+    warnings = [r.message for r in caplog.records]
+    assert any("acceptance_criteria" in w for w in warnings)
+    assert any("user_story" in w for w in warnings)
+
+
+def test_normalize_final_requirement_input_leaves_valid_input_untouched(caplog):
+    raw = {
+        "user_story": "As a user, I want X so that Y.",
+        "acceptance_criteria": ["Criterion 1."],
+        "scope": ["In scope."],
+        "assumptions": ["Assumption."],
+        "dependencies": ["Dependency."],
+    }
+
+    with caplog.at_level("WARNING"):
+        result = normalize_final_requirement_input(raw, ticket_title="irrelevant", session_id="sess-5")
+
+    assert result == raw
+    assert caplog.records == []
+
+
+def test_normalize_final_requirement_input_does_not_coerce_empty_string_list_field():
+    # An empty string isn't recoverable content - leave it as-is so Pydantic
+    # rejects it normally rather than silently inventing a [""] item.
+    raw = {"user_story": "As a user, I want X so that Y.", "acceptance_criteria": ""}
+    result = normalize_final_requirement_input(raw, ticket_title="irrelevant", session_id="sess-6")
+    assert result["acceptance_criteria"] == ""
+
+
+# --- Phase 2E robustness: end-to-end recovery from a malformed Claude response ---
+#
+# generate_final_requirement itself is exercised here (not monkeypatched) by
+# faking the underlying Anthropic client, reproducing the exact malformed
+# shape captured from the real production failure - confirms /finalize
+# returns 200 with a coerced result instead of 502, and that the coercion is
+# logged.
+
+
+class _FakeToolUseBlock:
+    def __init__(self, name: str, input_: dict):
+        self.type = "tool_use"
+        self.name = name
+        self.input = input_
+
+
+class _FakeMessagesResponse:
+    def __init__(self, content: list):
+        self.content = content
+
+
+class _FakeMessages:
+    def __init__(self, content: list):
+        self._content = content
+
+    def create(self, **kwargs):
+        return _FakeMessagesResponse(self._content)
+
+
+class _FakeAnthropicClient:
+    def __init__(self, content: list):
+        self.messages = _FakeMessages(content)
+
+
+def test_coaching_finalize_recovers_from_malformed_claude_response(monkeypatch, caplog):
+    analysis = _make_analysis(rc=1, ac=0, oq=0, sd=0)
+    session_id = _create_completed_session(analysis, "max_questions_reached", question_count=5)
+
+    malformed_input = {
+        "acceptance_criteria": (
+            "Given a Jira issue is successfully created, when the app attempts to notify "
+            "Slack, the message content and channel are undetermined (truncated for this test)."
+        )
+    }
+    fake_client = _FakeAnthropicClient([_FakeToolUseBlock(FINAL_REQUIREMENT_TOOL_NAME, malformed_input)])
+    monkeypatch.setattr("app.coaching.llm.get_client", lambda: fake_client)
+
+    with caplog.at_level("WARNING"):
+        response = client.post(f"/api/coaching/{session_id}/finalize")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["final_requirement"]["acceptance_criteria"] == [malformed_input["acceptance_criteria"]]
+    assert data["final_requirement"]["scope"] == []
+    assert data["final_requirement"]["assumptions"] == []
+    assert data["final_requirement"]["dependencies"] == []
+    assert data["final_requirement"]["user_story"]  # non-empty fallback
+
+    warnings = [r.message for r in caplog.records]
+    assert any("acceptance_criteria" in w and session_id in w for w in warnings)
+    assert any("user_story" in w and session_id in w for w in warnings)

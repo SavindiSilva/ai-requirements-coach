@@ -259,7 +259,9 @@ def finalize_coaching_session(session_id: str) -> FinalizeResponse:
         )
 
         try:
-            final_requirement = generate_final_requirement(system_prompt, user_prompt)
+            final_requirement = generate_final_requirement(
+                system_prompt, user_prompt, ticket_title=ticket.title, session_id=session_id
+            )
         except CoachingLLMError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 

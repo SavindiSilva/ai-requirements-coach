@@ -41,7 +41,10 @@ free-text parsing) without a strong reason.
    ```
 5. If no matching `tool_use` block is found, or validation fails, raise a
    module-specific error (see §5) — never fall back to guessing or returning
-   partial data.
+   partial data. One narrow, explicitly-named exception exists (§12): a
+   fixed, small set of *recoverable* malformed shapes may be coerced before
+   validation, logged when it fires — this is not "guessing" at content, it
+   only reshapes content Claude already produced.
 
 The Claude client itself is a single lazily-instantiated, module-level
 singleton (`app/agent/llm.py::get_client()`), reused everywhere via import
@@ -399,3 +402,49 @@ Supabase is still the answer for anything that does:
   multiple worker processes aren't safe — it solves "survives a restart,"
   not "safe for horizontal scaling." Document that limitation in the
   module docstring, same as the in-memory stores it replaces.
+
+## 12. Recovering from a narrow set of malformed forced tool-use shapes
+
+`app/coaching/llm.py::normalize_final_requirement_input()` (used by
+`generate_final_requirement()`) is the reference example for when it's
+correct to coerce a Claude forced-tool-use response instead of following
+§1's normal "raise on any validation failure" rule. Forced `tool_choice`
+guarantees *which* tool Claude calls, not that every argument's runtime
+type matches the JSON Schema — under genuinely low-information input (e.g.
+a ticket that reached `max_questions_reached` with consistently vague
+coaching answers), Claude can occasionally collapse a list-typed field into
+a plain string, or omit a required field. Reach for this pattern only when
+all of the following hold — it is not a general "make validation errors go
+away" tool:
+
+- The set of malformed shapes being recovered is **small, explicitly named,
+  and individually justified** — here, exactly two: a list-typed field
+  returned as a non-empty string (wrapped as a single-item list, preserving
+  Claude's actual text), and a missing/blank required field with an honest,
+  clearly-labeled fallback synthesized from data already in hand (never
+  fabricated content). Anything else is left alone for Pydantic to reject
+  normally — there's nothing safe to guess there.
+- The coercion function is **pure** (`dict -> dict`, no I/O besides the log
+  line) so it's directly unit-testable with hand-built malformed dicts, no
+  LLM call needed — same convention as `select_weakest_criterion`/
+  `should_stop_coaching` (§6).
+- Every time it actually fires, it **logs a warning** naming the field(s)
+  coerced and enough context to find the case again (here, `session_id`) —
+  `logging.getLogger(__name__)`, mirroring `app/agent/rag_integration.py`.
+  The point is visibility into how often the underlying prompt-following
+  issue recurs, not a silent patch-over.
+- The system prompt is **also** hardened with the explicit type contract
+  (list fields must always be a JSON array even with one item; the
+  always-required field must always be present) as complementary
+  prevention. The coercion is what actually guarantees the endpoint can't
+  hard-fail on this input class; the prompt wording only reduces how often
+  the coercion path is needed — it is not a substitute for it.
+- To test the integration end-to-end (not just the pure coercion function),
+  fake the Anthropic client itself (a minimal stand-in for
+  `client.messages.create()` returning a `tool_use` block with the exact
+  malformed `input` dict) and monkeypatch `app.coaching.llm.get_client` —
+  this exercises the real `generate_final_requirement()`, unlike the
+  existing convention of monkeypatching
+  `app.coaching.router.generate_final_requirement` wholesale (which is
+  right for testing router orchestration, but bypasses this function
+  entirely).

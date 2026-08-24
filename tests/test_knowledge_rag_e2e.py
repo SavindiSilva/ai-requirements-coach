@@ -254,7 +254,7 @@ def test_finalize_coaching_session_uses_the_tickets_real_project_id_for_retrieva
 
     captured: dict = {}
 
-    def _fake_generate(system_prompt, user_prompt):
+    def _fake_generate(system_prompt, user_prompt, **kwargs):
         captured["user_prompt"] = user_prompt
         return _SAMPLE_FINAL_REQUIREMENT
 
@@ -276,7 +276,7 @@ def test_finalize_coaching_session_falls_back_to_temp_eval_project_id_when_ticke
         captured["project_id"] = project_id
         return []
 
-    def _fake_generate(system_prompt, user_prompt):
+    def _fake_generate(system_prompt, user_prompt, **kwargs):
         return _SAMPLE_FINAL_REQUIREMENT
 
     monkeypatch.setattr("app.coaching.router.get_retrieved_context", _fake_get_retrieved_context)

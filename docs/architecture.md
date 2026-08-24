@@ -233,6 +233,25 @@ assumptions, dependencies, remaining gaps, current scores). Because
 `/finalize` is idempotent server-side (see §4 above), the frontend re-calls
 it on retry after a failed attempt without any special-casing.
 
+`generate_final_requirement()` (`app/coaching/llm.py`) is robust to a
+specific malformed-output failure observed in production for tickets that
+reach `max_questions_reached` with consistently vague coaching answers:
+Claude occasionally collapses a list-typed field (`acceptance_criteria`,
+`scope`, `assumptions`, or `dependencies`) into a plain string, and/or omits
+`user_story` entirely. `normalize_final_requirement_input()` recovers both
+shapes before Pydantic validation — a string value is wrapped as a
+single-item list, and a missing/blank `user_story` is replaced with an
+honest placeholder built from the ticket title — logging a warning
+(including the field and `session_id`) whenever it fires, so real
+occurrences stay visible rather than being silently patched over. Any other
+malformed shape is left for Pydantic to reject normally, since there's
+nothing safe to guess there. `_FINAL_REQUIREMENT_SYSTEM_PROMPT`
+(`app/coaching/prompts.py`) also explicitly states the type contract (list
+fields must always be a JSON array, `user_story` must always be present) as
+complementary prevention — the coercion is what actually guarantees
+`/finalize` never hard-fails on this input class, the prompt wording just
+reduces how often it's needed.
+
 Notes on what is **not** implemented in this flow:
 - No user-approval endpoint (`POST /api/requirements/{id}/approve` from
   CLAUDE.md §24 does not exist).

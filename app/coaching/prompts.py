@@ -122,6 +122,15 @@ below. Never invent a new dependency. These were never confirmed by Jira \
 data, so phrase each one as inferred/possible (e.g. "Likely depends on ..."), \
 never as a confirmed fact.
 
+Every list field (acceptance_criteria, scope, assumptions, dependencies) \
+must always be a JSON array, never a single string - even when the ticket \
+and coaching answers leave almost nothing resolved, put your one \
+best-effort item inside the array (for example, a single item explaining \
+what remains undetermined) rather than writing a paragraph outside the \
+array structure. user_story must always be present as one sentence - even \
+when most details are unresolved, write your honest best-effort sentence \
+naming who wants what, rather than omitting the field.
+
 You must respond only by calling the submit_final_requirement tool with the \
 complete structured requirement. Do not respond in plain text.
 """
