@@ -5,6 +5,7 @@ import { CriterionCard } from './CriterionCard';
 import { FindingList } from './FindingList';
 import { ClarificationQuestions } from './ClarificationQuestions';
 import { formatScore } from '../../lib/format';
+import { READINESS_PASS_THRESHOLD } from '../../lib/readiness';
 import type { AnalysisResult, TicketInput } from '../../lib/types/analysis';
 
 interface AnalysisResultViewProps {
@@ -27,13 +28,6 @@ const CRITERIA: { key: CriterionKey; label: string }[] = [
   { key: 'open_questions', label: 'Open Questions' },
   { key: 'scope_definition', label: 'Scope Definition' },
 ];
-
-// Mirrors app/core/config.py::Settings.readiness_pass_threshold's default
-// (2) — the same "criterion score >= this counts as ready" bar the backend
-// uses to decide whether coaching can stop. Purely a display label here;
-// no backend field is needed since every criterion score used to compute
-// it is already in AnalysisResult.
-const READINESS_PASS_THRESHOLD = 2;
 
 export function AnalysisResultView({
   ticket,

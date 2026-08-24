@@ -13,7 +13,7 @@ const NAV_ITEMS: { screen: Screen; label: string }[] = [
 
 export function NavBar({ active, onNavigate }: NavBarProps) {
   return (
-    <div className="bg-[var(--color-surface)]">
+    <div className="sticky top-0 z-20 bg-[var(--color-surface)]">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2.5">
@@ -21,7 +21,7 @@ export function NavBar({ active, onNavigate }: NavBarProps) {
               ✦
             </div>
             <span className="text-sm font-medium font-[family-name:var(--font-heading)]">
-              AI Requirements Coach
+              ReqPilot
             </span>
           </div>
           <nav className="flex items-center gap-1">

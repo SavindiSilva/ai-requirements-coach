@@ -31,7 +31,7 @@ export function LoginPage({ onSignIn }: LoginPageProps) {
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--color-accent)] text-sm font-medium text-[var(--color-neutral-100)]">
               ✦
             </div>
-            <div className="text-base font-medium tracking-[-0.01em]">AI Requirements Coach</div>
+            <div className="text-base font-medium tracking-[-0.01em]">ReqPilot</div>
           </div>
 
           <h1 className="mb-3 max-w-[420px] text-[27px] leading-[1.25] font-medium tracking-[-0.015em]">
