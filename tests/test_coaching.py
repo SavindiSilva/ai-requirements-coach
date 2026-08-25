@@ -414,6 +414,43 @@ def test_coaching_next_stops_when_max_questions_reached(monkeypatch):
     assert session["question_count"] == settings.max_clarification_rounds
 
 
+def test_coaching_next_readiness_met_on_same_round_as_max_questions_wins(monkeypatch):
+    # Tie-break case: readiness reached on the exact same round the
+    # question cap is hit. stop_reason must be "readiness_threshold_met",
+    # not "max_questions_reached" - a ticket that is fully ready should
+    # never be reported as merely "ran out of questions".
+    analysis = _make_analysis(rc=2, ac=2, oq=2, sd=2)  # min score 2 >= threshold 2
+    session_id = _create_next_ready_session(analysis, question_count=settings.max_clarification_rounds)
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("Claude must not be called when the stop condition is met")
+
+    monkeypatch.setattr("app.coaching.router.generate_clarification_question", _fail_if_called)
+
+    response = client.post(f"/api/coaching/{session_id}/next")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["is_complete"] is True
+    assert data["stop_reason"] == "readiness_threshold_met"
+    assert data["question_count"] == settings.max_clarification_rounds
+
+    session = get_session(session_id)
+    assert session["stop_reason"] == "readiness_threshold_met"
+
+    def _fake_generate(system_prompt, user_prompt, **kwargs):
+        return _SAMPLE_FINAL_REQUIREMENT
+
+    monkeypatch.setattr("app.coaching.router.generate_final_requirement", _fake_generate)
+
+    finalize_response = client.post(f"/api/coaching/{session_id}/finalize")
+    assert finalize_response.status_code == 200
+    finalize_data = finalize_response.json()
+
+    assert finalize_data["stop_reason"] == "readiness_threshold_met"
+    assert finalize_data["remaining_gaps"] == []
+
+
 def test_coaching_next_unknown_session_returns_404():
     response = client.post("/api/coaching/nonexistent-session/next")
     assert response.status_code == 404
