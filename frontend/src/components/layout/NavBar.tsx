@@ -1,3 +1,5 @@
+import { useAuth } from '../../lib/auth';
+
 export type Screen = 'dashboard' | 'review' | 'history';
 
 interface NavBarProps {
@@ -11,7 +13,16 @@ const NAV_ITEMS: { screen: Screen; label: string }[] = [
   { screen: 'history', label: 'History' },
 ];
 
+function initialsFromEmail(email: string): string {
+  const local = email.split('@')[0] ?? email;
+  const parts = local.split(/[._-]+/).filter(Boolean);
+  const chars = parts.length >= 2 ? [parts[0][0], parts[1][0]] : [local.slice(0, 2)];
+  return chars.join('').slice(0, 2).toUpperCase();
+}
+
 export function NavBar({ active, onNavigate }: NavBarProps) {
+  const { session, signOut } = useAuth();
+  const email = session?.user.email ?? '';
   return (
     <div className="sticky top-0 z-20 bg-[var(--color-surface)]">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
@@ -44,14 +55,18 @@ export function NavBar({ active, onNavigate }: NavBarProps) {
         <div className="flex items-center gap-2.5">
           <div className="text-right">
             <div className="text-[12.5px] font-medium whitespace-nowrap text-[var(--color-text)]">
-              Savindi Silva
+              {email}
             </div>
-            <div className="text-[11px] whitespace-nowrap text-[color-mix(in_srgb,var(--color-text)_45%,transparent)]">
-              Acme Inc.
-            </div>
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              className="cursor-pointer text-[11px] whitespace-nowrap text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] hover:text-[var(--color-text)]"
+            >
+              Sign out
+            </button>
           </div>
           <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--color-text)_16%,transparent)] bg-[var(--color-neutral-900)] text-[11.5px] font-medium text-[var(--color-accent-300)]">
-            SS
+            {email ? initialsFromEmail(email) : ''}
           </span>
         </div>
       </div>

@@ -4,18 +4,13 @@ import { LoginPage } from './LoginPage';
 import { DashboardPage } from './DashboardPage';
 import { ReviewTicketPage } from './ReviewTicketPage';
 import { HistoryPage } from './HistoryPage';
+import { useAuth } from '../lib/auth';
 
-// Cosmetic login/nav state only — not real authentication. Persisted to
-// sessionStorage (not plain useState) so it survives a same-tab page
-// reload, including the reload Jira's OAuth redirect triggers when it
-// lands back on this app after consent.
-const IS_LOGGED_IN_KEY = 'aiRequirementsCoach.isLoggedIn';
+// Active-screen nav state only — persisted to sessionStorage so it
+// survives a same-tab page reload, including the reload Jira's OAuth
+// redirect triggers when it lands back on this app after consent.
 const ACTIVE_SCREEN_KEY = 'aiRequirementsCoach.activeScreen';
 const VALID_SCREENS: Screen[] = ['dashboard', 'review', 'history'];
-
-function readStoredIsLoggedIn(): boolean {
-  return sessionStorage.getItem(IS_LOGGED_IN_KEY) === 'true';
-}
 
 function readStoredScreen(): Screen {
   const stored = sessionStorage.getItem(ACTIVE_SCREEN_KEY);
@@ -23,19 +18,19 @@ function readStoredScreen(): Screen {
 }
 
 export function AppShell() {
-  const [isLoggedIn, setIsLoggedIn] = useState(readStoredIsLoggedIn);
+  const { session, isLoading } = useAuth();
   const [activeScreen, setActiveScreen] = useState<Screen>(readStoredScreen);
-
-  useEffect(() => {
-    sessionStorage.setItem(IS_LOGGED_IN_KEY, String(isLoggedIn));
-  }, [isLoggedIn]);
 
   useEffect(() => {
     sessionStorage.setItem(ACTIVE_SCREEN_KEY, activeScreen);
   }, [activeScreen]);
 
-  if (!isLoggedIn) {
-    return <LoginPage onSignIn={() => setIsLoggedIn(true)} />;
+  if (isLoading) {
+    return null;
+  }
+
+  if (!session) {
+    return <LoginPage />;
   }
 
   return (

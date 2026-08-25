@@ -3,10 +3,7 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Field } from '../components/ui/Field';
 import { fieldInputClasses } from '../lib/fieldStyles';
-
-interface LoginPageProps {
-  onSignIn: () => void;
-}
+import { useAuth } from '../lib/auth';
 
 const CHECKLIST_ITEMS = [
   'Detects missing triggers, recipients and channels',
@@ -14,13 +11,42 @@ const CHECKLIST_ITEMS = [
   'Outputs development-ready user stories',
 ];
 
-export function LoginPage({ onSignIn }: LoginPageProps) {
+type Mode = 'sign-in' | 'sign-up';
+
+export function LoginPage() {
+  const { signIn, signUp } = useAuth();
+  const [mode, setMode] = useState<Mode>('sign-in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    onSignIn();
+    setError(null);
+    setInfo(null);
+    setIsSubmitting(true);
+
+    const { error: authError } =
+      mode === 'sign-in' ? await signIn(email, password) : await signUp(email, password);
+
+    setIsSubmitting(false);
+
+    if (authError) {
+      setError(authError);
+      return;
+    }
+
+    if (mode === 'sign-up') {
+      setInfo('Account created. You are now signed in.');
+    }
+  }
+
+  function toggleMode() {
+    setMode((m) => (m === 'sign-in' ? 'sign-up' : 'sign-in'));
+    setError(null);
+    setInfo(null);
   }
 
   return (
@@ -76,14 +102,16 @@ export function LoginPage({ onSignIn }: LoginPageProps) {
       <div className="flex flex-1 items-center justify-center px-[12vw] py-6 lg:px-16">
         <div className="w-[400px] max-w-full">
           <form onSubmit={handleSubmit}>
-            <Field label="Email" htmlFor="email">
+            <Field label="Email" htmlFor="email" error={error ?? undefined}>
               <input
                 id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"
-                className={fieldInputClasses(false)}
+                autoComplete="email"
+                required
+                className={fieldInputClasses(Boolean(error))}
               />
             </Field>
             <Field label="Password" htmlFor="password">
@@ -93,21 +121,36 @@ export function LoginPage({ onSignIn }: LoginPageProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className={fieldInputClasses(false)}
+                autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}
+                minLength={6}
+                required
+                className={fieldInputClasses(Boolean(error))}
               />
             </Field>
+
+            {info && (
+              <p className="mb-[22px] text-[12.5px] text-[var(--color-accent)]">{info}</p>
+            )}
 
             <div className="mb-[22px] text-right">
               <button
                 type="button"
-                className="cursor-pointer text-[12.5px] text-[color-mix(in_srgb,var(--color-text)_55%,transparent)] hover:text-[var(--color-text)]"
+                disabled
+                title="Not available in this demo"
+                className="cursor-not-allowed text-[12.5px] text-[color-mix(in_srgb,var(--color-text)_35%,transparent)]"
               >
                 Forgot password?
               </button>
             </div>
 
-            <Button type="submit" className="mb-[11px] w-full justify-center">
-              Sign In
+            <Button type="submit" disabled={isSubmitting} className="mb-[11px] w-full justify-center">
+              {isSubmitting
+                ? mode === 'sign-in'
+                  ? 'Signing in…'
+                  : 'Creating account…'
+                : mode === 'sign-in'
+                  ? 'Sign In'
+                  : 'Create account'}
             </Button>
 
             <div className="my-5 flex items-center gap-2.5">
@@ -116,20 +159,27 @@ export function LoginPage({ onSignIn }: LoginPageProps) {
               <div className="h-px flex-1 bg-[color-mix(in_srgb,var(--color-text)_12%,transparent)]" />
             </div>
 
-            <Button type="button" variant="secondary" className="w-full justify-center">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled
+              title="Not available in this demo"
+              className="w-full justify-center"
+            >
               <span className="h-3.5 w-3.5 rounded-[3px] bg-[conic-gradient(#4285F4_0_25%,#34A853_25%_50%,#FBBC05_50%_75%,#EA4335_75%_100%)]" />
               Continue with Google
             </Button>
           </form>
 
           <p className="mt-6 text-[13px] text-[color-mix(in_srgb,var(--color-text)_55%,transparent)]">
-            Don't have an account?{' '}
-            <button type="button" className="cursor-pointer text-[var(--color-accent)] hover:underline">
-              Create account
+            {mode === 'sign-in' ? "Don't have an account?" : 'Already have an account?'}{' '}
+            <button
+              type="button"
+              onClick={toggleMode}
+              className="cursor-pointer text-[var(--color-accent)] hover:underline"
+            >
+              {mode === 'sign-in' ? 'Create account' : 'Sign in'}
             </button>
-          </p>
-          <p className="mt-7 text-[11.5px] text-[color-mix(in_srgb,var(--color-text)_35%,transparent)]">
-            Prototype demo — no real authentication is performed.
           </p>
         </div>
       </div>
