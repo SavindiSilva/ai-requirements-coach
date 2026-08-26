@@ -30,9 +30,17 @@ from app.core.config import settings
 
 app = FastAPI(title=settings.app_name)
 
+# Comma-separated CORS_ALLOWED_ORIGINS overrides the single-origin default so
+# production can allow the deployed frontend domain without a code change;
+# unset (the local-dev default) falls back to [frontend_url] unchanged.
+_cors_origins = (
+    [origin.strip() for origin in settings.cors_allowed_origins.split(",") if origin.strip()]
+    or [settings.frontend_url]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

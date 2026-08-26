@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     app_name: str = "AI Requirements Coach"
     environment: str = "development"  # development | production
     frontend_url: str = "http://localhost:3000"
+    # Comma-separated list of allowed CORS origins. When unset, falls back to
+    # [frontend_url] (see main.py) so local dev behaviour is unchanged; set
+    # this in production to allow the deployed frontend domain (and, if
+    # needed, multiple origins) without a code change.
+    cors_allowed_origins: str = ""
 
     # --- Supabase (database + auth) ---
     # Using the new publishable/secret key system (anon/service_role are
@@ -35,6 +40,12 @@ class Settings(BaseSettings):
 
     # --- Vector DB (ChromaDB) ---
     chroma_persist_dir: str = "./chroma_data"
+
+    # --- Reviewed-ticket history (SQLite) ---
+    # Local-dev default matches the path used before this was configurable.
+    # In production (e.g. Render's ephemeral filesystem), point this at a
+    # path under a mounted persistent disk.
+    tickets_db_path: str = "./data/tickets.db"
 
     # --- Jira OAuth 2.0 (3LO) ---
     jira_client_id: str = ""

@@ -2,10 +2,11 @@
 
 Mirrors app/jira/store.py's shape conceptually (no auth/user system yet to
 scope by - app/auth/ is an empty stub), but persists to a local SQLite file
-(`DB_PATH`, default `data/tickets.db`, gitignored) instead of a process-local
-list, so reviewed-ticket history survives a backend restart. Not safe across
-multiple worker processes writing concurrently - same class of limitation as
-app/jira/store.py's single in-memory connection.
+(`DB_PATH`, sourced from `settings.tickets_db_path`, default `data/tickets.db`,
+gitignored) instead of a process-local list, so reviewed-ticket history
+survives a backend restart. Not safe across multiple worker processes writing
+concurrently - same class of limitation as app/jira/store.py's single
+in-memory connection.
 
 A ticket is upserted by issue_key: recorded once right after analysis and
 again if the user goes on to finish coaching, so the second call updates
@@ -17,9 +18,10 @@ source_issue_key) are never deduplicated - each is inserted as a new row.
 import sqlite3
 from pathlib import Path
 
+from app.core.config import settings
 from app.tickets.schemas import ReviewedTicket
 
-DB_PATH = Path("data/tickets.db")
+DB_PATH = Path(settings.tickets_db_path)
 
 
 def _connect() -> sqlite3.Connection:
