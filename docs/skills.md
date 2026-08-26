@@ -8,9 +8,13 @@
 > Jira module's own patterns (OAuth 2.0 3LO, in-memory token storage, a
 > dynamic-credential HTTP client) are implemented in `app/jira/` and
 > described in `docs/architecture.md` §12, but are not yet written up here
-> as reusable conventions. This document still does **not** cover auth or
-> database patterns — neither has been implemented yet, so there is nothing
-> real to document for them.
+> as reusable conventions. Real (frontend-only) authentication now exists
+> via Supabase Auth — see `docs/architecture.md` §14 for the flow and §10
+> below for the one pattern it touches; there is still no *backend* auth
+> pattern to document, since `app/auth/` remains an empty stub. This
+> document still does **not** cover database patterns — no SQLAlchemy/
+> Supabase-Postgres code has been written yet, so there is nothing real to
+> document for that.
 
 ## 1. Claude structured-output pattern
 
@@ -346,28 +350,35 @@ the same "optional capability" shape, not a departure from it.
 
 ## 10. Frontend: surviving a same-tab reload without real persistence
 
-`AppShell.tsx`'s `isLoggedIn`/`activeScreen` (docs/architecture.md §13) is
-the reference example for making purely cosmetic frontend state survive a
+`AppShell.tsx`'s `activeScreen` (docs/architecture.md §13) is the
+reference example for making purely cosmetic frontend state survive a
 page reload without adding real persistence. Reuse this shape any time a
 future fix needs "must survive this tab's reload" without needing "must
-survive a new tab/device/backend restart":
+survive a new tab/device/backend restart". (Login state used to follow
+this same pattern via an `isLoggedIn` flag — it was later replaced with a
+real Supabase Auth session, docs/architecture.md §14, which persists
+itself and needs none of this. `activeScreen` still applies, since nav
+position genuinely is scoped to "this tab, until it's closed.")
 
 - Read the initial value from `sessionStorage` via the `useState`
-  initializer function (`useState(readStoredIsLoggedIn)`), not a bare
+  initializer function (`useState(readStoredScreen)`), not a bare
   literal — this reads storage exactly once, on mount, not on every
   render.
-- Write back with one `useEffect` per stored value, keyed on that value's
-  own dependency array (`useEffect(() => sessionStorage.setItem(...),
-  [isLoggedIn])`) — not one combined effect for multiple values, so each
-  write only fires when its own value actually changes.
+- Write back with a `useEffect` keyed on that value's own dependency array
+  (`useEffect(() => sessionStorage.setItem(...), [activeScreen])`) — keep
+  one effect per stored value rather than one combined effect for
+  multiple values, so each write only fires when its own value actually
+  changes.
 - Validate whatever comes back out of storage before trusting it as the
   typed value (`readStoredScreen()` falls back to `'dashboard'` unless the
   stored string is one of the known `Screen` values) — storage can contain
   a stale value from a previous build.
 - Prefer `sessionStorage` over `localStorage` when the state is explicitly
-  not meant to be "real" persistence (here, cosmetic login state with no
-  real auth behind it, per CLAUDE.md §29) — it clears on tab close, which
-  keeps the behavior honest about what it actually guarantees.
+  not meant to be "real" persistence — it clears on tab close, which keeps
+  the behavior honest about what it actually guarantees. (Contrast: real
+  session persistence, like the Supabase Auth session in §14, should use
+  whatever the auth provider's own client does by default — don't
+  reimplement that with `sessionStorage`.)
 - This is a plain browser API, not a new dependency or abstraction — don't
   reach for a state-management library or a backend session endpoint for
   something that's explicitly scoped to "one tab, until it's closed."
@@ -448,3 +459,40 @@ away" tool:
   `app.coaching.router.generate_final_requirement` wholesale (which is
   right for testing router orchestration, but bypasses this function
   entirely).
+
+## 13. Making a hardcoded value deployment-configurable without changing local dev
+
+Two concrete examples: `app/tickets/store.py`'s SQLite `DB_PATH` and
+`app/main.py`'s CORS `allow_origins`, both changed to support deploying to
+Render/Vercel (docs/architecture.md §9, §10) without touching local dev
+behavior. Reach for this shape any time a value needs to become
+environment-configurable for a new deployment target:
+
+- **The new `Settings` field's default must equal the value that was
+  hardcoded before**, exactly — not a "sensible new default," the literal
+  old value (`tickets_db_path: str = "./data/tickets.db"`, matching what
+  `DB_PATH = Path("data/tickets.db")` was). This is what makes the change
+  provably additive: with no new env var set, behavior is byte-for-byte
+  unchanged, not just "probably fine."
+- **When the old value fed a list-shaped parameter (CORS `allow_origins`),
+  keep the fallback list-shaped, not empty/permissive.** `cors_allowed_origins`
+  defaults to `""`; `app/main.py` parses it into a list only when non-empty,
+  and falls back to `[settings.frontend_url]` — the exact single-origin
+  list CORS always used — rather than defaulting to `[]` (which would
+  silently block everything) or `["*"]` (which would silently become
+  permissive). The fallback must reproduce prior behavior, not guess at
+  new behavior.
+- **Prove the default is unchanged, don't just assert it.** After making
+  a value configurable, actually resolve it with no new env var set
+  (`python -c "from app.core.config import settings; print(settings.x)"`,
+  or import the module that derives from it) and confirm the resolved
+  value matches the old hardcoded one — this is cheap and catches a typo'd
+  default immediately, rather than after a deploy.
+- **A module-level constant computed from `settings` at import time (not a
+  direct `settings.x` reference at every call site) is fine to keep** if
+  something outside the module needs to monkeypatch it — `app/tickets/store.py`
+  keeps its module-level `DB_PATH = Path(settings.tickets_db_path)`
+  specifically because `tests/test_tickets.py` already monkeypatches
+  `store.DB_PATH` directly (§11); switching every internal reference to
+  `settings.tickets_db_path` inline would have broken that test fixture
+  for no benefit.

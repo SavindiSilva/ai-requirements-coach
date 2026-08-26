@@ -1,8 +1,13 @@
-# AI Requirements Coach
+# ReqPilot
 
 An AI assistant that helps startup software teams turn vague Jira tickets
 into development-ready requirements through an interactive coaching
 conversation, grounded in company-specific context via RAG.
+
+"ReqPilot" is a display-name rename only — the repository, backend
+package (`app/`), and all code identifiers are still `ai-requirements-coach`
+/ "AI Requirements Coach" internally. Nothing outside frontend-visible
+strings (page title, nav bar, login/dashboard copy) changed.
 
 ## Day 1 setup checklist
 
@@ -13,13 +18,19 @@ conversation, grounded in company-specific context via RAG.
    pip install -r requirements.txt
    ```
 
-2. **Create a Supabase project** at https://supabase.com
-   - Copy the Project URL and anon/public key into `.env` as
-     `SUPABASE_URL` / `SUPABASE_KEY`
-   - Copy the service_role key (Settings -> API) into
-     `SUPABASE_SERVICE_ROLE_KEY` — backend only, never expose this to the
-     frontend
+2. **Create a Supabase project** at https://supabase.com (used for real
+   email/password authentication via Supabase Auth, frontend-only today —
+   see "Authentication" below)
+   - Copy the Project URL and publishable key (Settings -> API Keys tab,
+     not "Legacy API Keys") into `.env` as `SUPABASE_URL` /
+     `SUPABASE_PUBLISHABLE_KEY`
+   - Copy the secret key into `SUPABASE_SECRET_KEY` — backend only, never
+     expose this to the frontend
    - Copy the Postgres connection string into `DATABASE_URL`
+   - Copy the same Project URL and publishable key into
+     `frontend/.env` as `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY`
+     (`cp frontend/.env.example frontend/.env`) — the frontend talks to
+     Supabase Auth directly, not through the backend
 
 3. **Get an Anthropic API key** and put it in `ANTHROPIC_API_KEY`
 
@@ -55,7 +66,9 @@ conversation, grounded in company-specific context via RAG.
 
 ```
 app/
-  auth/        Supabase-auth-backed session handling
+  auth/        empty stub — no backend session/token verification yet;
+               real login is Supabase Auth, enforced entirely on the
+               frontend (see "Authentication" below)
   jira/        OAuth 2.0 (3LO) + Jira REST API client
   tickets/     importing/storing ticket snapshots
   analysis/    the 4-criterion Definition of Ready evaluation engine
@@ -85,6 +98,52 @@ Definition.
 
 Coaching loop stops when all four criteria score >= 2, or after a
 maximum of 5 clarification questions (see `app/core/config.py`).
+
+## Authentication
+
+Real Supabase Auth (email/password sign-up, sign-in, sign-out) is
+implemented in the frontend (`frontend/src/lib/auth.tsx`,
+`frontend/src/lib/supabaseClient.ts`) — this is no longer a decorative
+login screen. Two important limits to be aware of:
+
+- **Frontend-enforced only.** The backend does not verify Supabase
+  session tokens on any request; every `/api/*` endpoint is reachable by
+  anyone who can reach the backend directly. Logging in only gates the
+  frontend UI.
+- **No per-user data scoping.** All accounts currently share the same
+  backend-side state: one Jira connection, one SQLite reviewed-ticket
+  history, one set of coaching sessions. There is no `user_id` anywhere
+  in the schema. See `docs/architecture.md` §14 for the full picture.
+
+## Deployment
+
+The app is deployed with the frontend on Vercel, the backend on Render,
+and the existing Supabase project for auth. The same codebase runs
+locally and in production — only environment variables differ.
+
+**Backend (Render)**
+- Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+  (single process — the SQLite ticket store isn't safe for concurrent
+  writes from multiple workers, so don't add `--workers`)
+- Mount a persistent disk and point `TICKETS_DB_PATH` and
+  `CHROMA_PERSIST_DIR` at paths under it — Render's filesystem is
+  otherwise ephemeral, and both defaults (`./data/tickets.db`,
+  `./chroma_data`) would be wiped on every deploy/restart
+- Set `CORS_ALLOWED_ORIGINS` to the deployed frontend's URL(s)
+  (comma-separated for more than one; falls back to `frontend_url`,
+  the local-dev default, if unset)
+- Set `JIRA_REDIRECT_URI` to the production callback URL — Atlassian
+  supports registering multiple callback URLs on one app, so the
+  production URL can be added alongside the localhost one without
+  breaking local dev
+- Set the remaining secrets from `.env.example`
+  (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `SUPABASE_*`, `DATABASE_URL`,
+  `JIRA_CLIENT_ID`/`JIRA_CLIENT_SECRET`)
+
+**Frontend (Vercel)**
+- Set `VITE_API_BASE_URL` to the Render backend's URL
+- Set `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` to the same
+  Supabase project used by the backend
 
 ## Build order (matches the locked plan)
 

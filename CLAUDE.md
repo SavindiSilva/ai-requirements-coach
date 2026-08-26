@@ -315,7 +315,8 @@ Do not rebuild the existing AI analysis, coaching, or RAG functionality unless a
    `TEMP_EVAL_PROJECT_ID` remains only as the fallback for manually-entered tickets
 4. User-approved Jira update
 5. End-to-end testing
-6. Deployment
+6. (Done) Deployment — frontend on Vercel, backend on Render, existing Supabase
+   project for auth; see README.md's "Deployment" section
 
 The exact order may be adjusted when required by integration dependencies, but scope must remain MVP-focused.
 
@@ -940,7 +941,8 @@ The next implementation stages are:
 5. Improved requirement review and explicit approval
 6. User-approved Jira update
 7. End-to-end testing
-8. Deployment
+8. (Done) Deployment — frontend on Vercel, backend on Render, existing Supabase
+   project for auth; see README.md's "Deployment" section
 
 Important dependency:
 

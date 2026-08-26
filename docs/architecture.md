@@ -194,8 +194,11 @@ POST /api/coaching/{id}/reanalyze
 
 POST /api/coaching/{id}/next
     → should_stop_coaching()            deterministic, no LLM:
-                                          stop if question_count >= max_clarification_rounds
-                                          OR min(4 criterion scores) >= readiness_pass_threshold
+                                          readiness is checked FIRST: stop with
+                                          READINESS_THRESHOLD_MET if min(4 criterion
+                                          scores) >= readiness_pass_threshold; only
+                                          if not, stop with MAX_QUESTIONS_REACHED if
+                                          question_count >= max_clarification_rounds
     → if stop:   mark_coaching_complete()
     → if not:    select_weakest_criterion() + generate_clarification_question()
                   → set_next_question()
@@ -214,6 +217,18 @@ POST /api/coaching/{id}/finalize
                                           (idempotent — cached on session after first call)
     ← {final_requirement, remaining_gaps, current_scores, ...}
 ```
+
+**Ordering matters for `stop_reason` correctness.** `should_stop_coaching()`
+(`app/coaching/stop_condition.py`) checks the readiness threshold *before*
+the question-count cap, specifically so that a round which satisfies both
+conditions at once (readiness reached on the exact round the question cap
+is also hit) is recorded as `readiness_threshold_met`, not
+`max_questions_reached`. The reverse order previously mislabeled a fully
+ready ticket as needing more clarification — `max_questions_reached` should
+only ever mean the cap was hit *without* also reaching full readiness.
+`stop_reason` is persisted on the `ReviewedTicket` row (§13) and is used
+downstream as the Ready/Needs Clarification signal, so this ordering bug
+was user-visible, not just internal bookkeeping.
 
 `/start`, `/reanalyze`, and `/next` all pick up retrieval "for free" because
 they call `analyze_ticket()`, which now runs the two-node graph described
@@ -366,7 +381,8 @@ is enforced instead).
   exactly one Jira connection process-wide (there is no user concept to
   scope it by yet); does not survive a restart.
 - **Reviewed-ticket history**: SQLite-backed (`app/tickets/store.py`,
-  `DB_PATH` = `data/tickets.db`, gitignored), upserted by `issue_key` so
+  `DB_PATH` sourced from `settings.tickets_db_path` — default
+  `./data/tickets.db`, gitignored — see §9), upserted by `issue_key` so
   re-recording the same ticket (e.g. after coaching finishes) updates its
   row instead of duplicating it. Unlike the coaching/Jira-connection
   stores, this one does survive a backend restart — the only persistence
@@ -388,11 +404,13 @@ Settings actually defined today:
 
 | Setting | Used today? | Notes |
 |---|---|---|
-| `app_name`, `environment`, `frontend_url` | Yes | `app_name` in FastAPI title + `/health`; `frontend_url` in CORS `allow_origins` |
+| `app_name`, `environment`, `frontend_url` | Yes | `app_name` in FastAPI title + `/health`; `frontend_url` is the CORS fallback origin when `cors_allowed_origins` is unset |
+| `cors_allowed_origins` | Yes | Comma-separated list; `app/main.py` splits it into `allow_origins`, falling back to `[frontend_url]` when empty (the default) — see CORS note below |
 | `supabase_url`, `supabase_publishable_key`, `supabase_secret_key`, `database_url` | No | Declared, unused — no DB/auth code exists yet |
 | `anthropic_api_key`, `claude_model` | Yes | Used by `app/agent/llm.py::get_client()` |
 | `openai_api_key`, `embedding_model` | Yes | Used by `app/rag/embeddings.py::get_embedding_client()` — not yet used by anything outside `app/rag/` |
-| `chroma_persist_dir` | Yes | Used by `app/rag/store.py::get_chroma_client()` (`chromadb.PersistentClient(path=...)`) |
+| `chroma_persist_dir` | Yes | Used by `app/rag/store.py::get_chroma_client()` (`chromadb.PersistentClient(path=...)`); default `./chroma_data` — point at a mounted persistent disk in production |
+| `tickets_db_path` | Yes | Used by `app/tickets/store.py`'s module-level `DB_PATH`; default `./data/tickets.db`, identical to the previously-hardcoded value — see §8/§13 |
 | `jira_client_id`, `jira_client_secret`, `jira_redirect_uri`, `jira_scopes` | Yes | Used by `app/jira/oauth.py`; `jira_scopes` defaults to `"read:jira-work write:jira-work offline_access"` - `write:jira-work` was added for the issue-update flow (§12); a connection made before this change is read-only and must be reconnected (§8) to pick up the new scope |
 | `max_clarification_rounds` | Yes | Used by `stop_condition.py` and the analysis system prompt (caps question count) |
 | `readiness_pass_threshold` | Yes | Used by `stop_condition.py` (per-criterion stop bar, not `overall_readiness`) |
@@ -410,8 +428,13 @@ Jira read or write (unlike RAG, which is optional background context).
 Supabase/Postgres is still configured but not yet integrated or called
 anywhere.
 
-CORS is configured with a single allowed origin (`settings.frontend_url`),
-all methods and headers, credentials allowed.
+CORS allowed origins come from `settings.cors_allowed_origins` (comma-
+separated, split and stripped in `app/main.py`), falling back to the
+single origin `[settings.frontend_url]` when unset — the local-dev
+default is therefore unchanged (`http://localhost:3000`), while
+production sets `CORS_ALLOWED_ORIGINS` to the deployed frontend's domain
+(and can list more than one, comma-separated, e.g. to also allow a preview
+deployment URL). All methods and headers, credentials allowed either way.
 
 ## 10. Current implementation status
 
@@ -420,11 +443,11 @@ all methods and headers, credentials allowed.
 | Core AI analysis | **Implemented** | `app/analysis/`, `app/agent/`, `POST /api/analyse`, `tests/test_analysis.py` |
 | Readiness scoring | **Implemented** | 4-criterion scoring + Python-computed `overall_readiness` in `app/agent/graph.py`; deterministic stop/gap logic in `app/coaching/stop_condition.py` |
 | Coaching | **Implemented** | Full start → message → reanalyze → next → finalize loop in `app/coaching/`, covered by `tests/test_coaching.py` |
-| Frontend integration | **Partially implemented** | `frontend/` (React + Vite): `POST /api/analyse`, the full coaching loop (`/start`, `/message`, `/reanalyze`, `/next`, `/finalize`), the Jira connect/project/issue flow, and now the "Approve & Update Jira" action on the finalized-requirement view are wired to real backend calls. `AppShell.tsx`'s login/nav state now persists to `sessionStorage` (§13) and reviewed-ticket history now lives in the backend (§13), so both survive a page refresh; an in-progress coaching session itself still does not (coaching state is backend-in-memory only, with no resume-by-`session_id` endpoint, and the Jira connection is still a single in-memory connection - both explicitly temporary, see §8). |
+| Frontend integration | **Partially implemented** | `frontend/` (React + Vite): `POST /api/analyse`, the full coaching loop (`/start`, `/message`, `/reanalyze`, `/next`, `/finalize`), the Jira connect/project/issue flow, and the "Approve & Update Jira" action on the finalized-requirement view are wired to real backend calls. Login is now a real Supabase Auth session (§14), not the earlier `sessionStorage` flag; `activeScreen` nav state still persists to `sessionStorage` (§13). Reviewed-ticket history lives in the backend (§13), so it survives a page refresh; an in-progress coaching session itself still does not (coaching state is backend-in-memory only, with no resume-by-`session_id` endpoint, and the Jira connection is still a single in-memory connection - both explicitly temporary, see §8). |
 | Jira integration | **Implemented** — OAuth (3LO) + read APIs, in-memory connection | `app/jira/`, `tests/test_jira.py`, frontend `JiraImportFlow` (see §12). `read:jira-work write:jira-work offline_access`; connection storage is explicitly temporary scaffolding (§8). |
 | RAG | **Implemented** — standalone module + API router + Jira-project-scoped prompt integration | `app/rag/`, `app/rag/router.py`, `app/agent/rag_integration.py`, `tests/test_rag.py`, `tests/test_rag_integration.py`, `tests/test_knowledge_upload.py`, `tests/test_knowledge_rag_e2e.py` — ingestion, embedding, retrieval, a knowledge-upload API router (`POST /api/knowledge/upload`), and analysis/coaching-finalize prompt integration are all implemented and tested. `TicketInput` now has a `project_id` field (see §11): for Jira-imported tickets it comes from the selected Jira project and is threaded into `retrieve_context_node`/`finalize_coaching_session`; **`TEMP_EVAL_PROJECT_ID = "default"`** remains only as the fallback for manually-entered tickets, which have no `project_id`. |
 | Jira update | **Implemented** — description only, explicit user confirmation required | `POST /api/jira/issues/{issue_key}/update` (`app/jira/router.py`), `app/jira/client.py::update_issue()`, frontend confirm step in `FinalRequirementView.tsx` (see §12). No custom fields, assignee, priority, status, or story points are touched. No separate persisted-approval endpoint (CLAUDE.md §24's `POST /api/requirements/{id}/approve`) - the confirm step itself is the approval gate. |
-| Deployment | **Not implemented** | No Dockerfile, no CI config, no Render/Vercel deployment config found in the repository |
+| Deployment | **Deployed** | Frontend on Vercel, backend on Render (single `uvicorn` process, persistent disk mounted for `tickets_db_path`/`chroma_persist_dir`), using the existing Supabase project for auth. `cors_allowed_origins` and `jira_redirect_uri` are environment-configurable (§9), so the same codebase runs locally and in production via env vars only — there is still no Dockerfile, CI config, or `render.yaml`/`vercel.json` in the repository; the start command and env vars are configured directly in each platform's project settings |
 
 Everything under `analysis/`, `coaching/`, `rag/` (including its
 `app/agent/rag_integration.py` glue), and `jira/` is complete and tested
@@ -433,8 +456,12 @@ the others in one specific way: it evaluates against a single, explicitly
 temporary `project_id="default"` rather than real per-project context —
 that narrower scope is itself fully implemented, not partially built.
 Jira's scope is narrower in a different way: read-only, single in-memory
-connection, no write/update endpoint (see §12). Everything else (`auth/`,
-`database/`, `tickets/`) is an untouched empty stub.
+connection, no write/update endpoint (see §12). `auth/` and `database/`
+remain untouched empty stubs on the backend — real login now exists, but
+entirely on the frontend via Supabase Auth (§14), not through `app/auth/`.
+`tickets/` is implemented (§13), not a stub — its narrower-scope caveat is
+the same one called out in §8: process-local-safe only, no per-user
+scoping.
 
 ## 11. RAG module (Phase 3: standalone module + evaluation-scoped prompt integration)
 
@@ -949,8 +976,10 @@ DashboardPage.tsx / HistoryPage.tsx (on mount)
 useReviewedTickets()  →  GET /api/tickets/reviewed  →  store.list_reviewed_tickets()
 ```
 
-`app/tickets/store.py` persists to a local SQLite file (`DB_PATH`, default
-`data/tickets.db`, gitignored) via the stdlib `sqlite3` module — a single
+`app/tickets/store.py` persists to a local SQLite file (`DB_PATH`, built
+from `settings.tickets_db_path`, default `./data/tickets.db`, gitignored —
+configurable so a production deploy can point it at a mounted persistent
+disk; see §9) via the stdlib `sqlite3` module — a single
 `reviewed_tickets` table, one row per ticket, upserted by deleting any
 existing row with the same `issue_key` before inserting (mirroring
 `app/jira/store.py`'s upsert-by-key idea, but persisted rather than
@@ -974,27 +1003,25 @@ untouched by `ReviewedTicketsTable.tsx`) at the API boundary - the same
 snake_case-wire-to-camelCase-app-state transform pattern already used by
 `useSubmitCoachingAnswer.ts`.
 
-**Login/nav state moved from plain `useState` to `sessionStorage`-backed
-state.** `AppShell.tsx`'s `isLoggedIn` and `activeScreen` used to reset on
-any full page reload - including the reload Jira's OAuth redirect causes
-when it lands back on the app after consent (`GET /jira/callback` responds
-with a `302` to `settings.frontend_url`, a real top-level navigation, not a
-fetch - see §12). That reload was silently bouncing a connected user back
-to the login screen. Both values are now read from `sessionStorage` on
-initial `useState`, and written back via a `useEffect` on every change:
+**Nav state moved from plain `useState` to `sessionStorage`-backed state.**
+`AppShell.tsx`'s `activeScreen` used to reset on any full page reload -
+including the reload Jira's OAuth redirect causes when it lands back on
+the app after consent (`GET /jira/callback` responds with a `302` to
+`settings.frontend_url`, a real top-level navigation, not a fetch - see
+§12). It's now read from `sessionStorage` on initial `useState`, and
+written back via a `useEffect` on every change:
 
 ```ts
-const [isLoggedIn, setIsLoggedIn] = useState(readStoredIsLoggedIn);
 const [activeScreen, setActiveScreen] = useState<Screen>(readStoredScreen);
-useEffect(() => sessionStorage.setItem(IS_LOGGED_IN_KEY, String(isLoggedIn)), [isLoggedIn]);
 useEffect(() => sessionStorage.setItem(ACTIVE_SCREEN_KEY, activeScreen), [activeScreen]);
 ```
 
-This is still not real authentication (CLAUDE.md §29/out-of-scope for this
-fix) - it only makes the existing cosmetic login state survive a same-tab
-reload it previously didn't. `sessionStorage` (not `localStorage`) is used
-deliberately: it clears when the tab closes, matching the "prototype demo,
-no real auth" framing already on `LoginPage.tsx`.
+**Superseded for login itself.** At the time this fix was made, `AppShell.tsx`
+also held a cosmetic `isLoggedIn` flag the same way, since there was no
+real auth yet. That flag no longer exists: login is now a real Supabase
+Auth session (see §14), read via `useAuth()` rather than `sessionStorage`.
+The `sessionStorage` pattern described above now applies only to
+`activeScreen`.
 
 ### Tests: `tests/test_tickets.py`
 
@@ -1005,3 +1032,50 @@ the real `data/tickets.db` and don't leak state between tests. Pure store
 functions (`upsert_reviewed_ticket`, `list_reviewed_tickets`) are tested
 directly with no HTTP involved, and endpoint tests use `TestClient` the
 same way `tests/test_jira.py`/`tests/test_coaching.py` do.
+
+## 14. Real authentication (Supabase Auth, frontend-enforced only)
+
+Real Supabase Auth (email/password sign-up, sign-in, sign-out, real
+sessions) replaced the earlier cosmetic login screen. This is a
+**frontend-only** integration — nothing in `app/` changed.
+
+```
+LoginPage.tsx (sign-up / sign-in forms)
+        ↓
+useAuth()                                  frontend/src/lib/auth.tsx
+        ↓
+supabase.auth.signInWithPassword() / signUp() / signOut()
+                                            @supabase/supabase-js, direct to Supabase
+        ↓
+supabase.auth.getSession() (once, on mount) +
+supabase.auth.onAuthStateChange() (ongoing)  keep AuthProvider's `session` in sync
+        ↓
+AppShell.tsx: renders <LoginPage /> when session is null, the real app otherwise
+```
+
+- `AuthProvider` (`frontend/src/lib/auth.tsx`) wraps the app in `App.tsx`
+  and exposes `{session, isLoading, signIn, signUp, signOut}` via
+  `useAuth()`. `AppShell.tsx` reads `session`/`isLoading` from it — the
+  `sessionStorage`-backed `isLoggedIn` flag described in §13 no longer
+  exists; `activeScreen` is still `sessionStorage`-backed exactly as §13
+  describes.
+- Supabase's client persists the session itself (its default storage),
+  so a logged-in user survives a full reload/new tab — stronger than the
+  `sessionStorage` workaround it replaced.
+- **Frontend-enforced only — the backend does not verify session tokens.**
+  `app/auth/` (§2) is still an empty `__init__.py`-only stub; no FastAPI
+  dependency checks a bearer token on any route. Every endpoint in §7 is
+  reachable directly, with or without a Supabase session — logging in
+  only gates the frontend UI, not the API.
+- **No per-user data scoping.** Every backend-side store this document
+  describes (§8) is still global, not scoped by user: one process-local
+  Jira connection, one SQLite `reviewed_tickets` table, one set of
+  process-local coaching sessions. There is no `user_id` column or field
+  anywhere. Two different Supabase accounts see and can overwrite the
+  same ticket history and the same Jira connection.
+- `frontend/src/lib/supabaseClient.ts` reads `VITE_SUPABASE_URL` /
+  `VITE_SUPABASE_PUBLISHABLE_KEY` and throws a clear error at import time
+  if either is missing, rather than failing silently inside `auth.tsx`.
+- No automated tests cover this flow — there is no frontend test suite in
+  this repository for any feature yet, not just auth (`frontend/package.json`
+  has no `test` script).
