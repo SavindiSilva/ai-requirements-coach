@@ -181,7 +181,7 @@ export function CoachingPage({ ticket, coaching, onBackToJira }: CoachingPagePro
   if (finalizeMutation.isSuccess) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-10">
-        <h1 className="mb-6 text-2xl font-medium">Development-Ready Requirement</h1>
+        <h1 className="mb-6 text-2xl font-semibold">Development-Ready Requirement</h1>
         <FinalRequirementView
           result={finalizeMutation.data}
           ticket={ticket}
@@ -193,23 +193,23 @@ export function CoachingPage({ ticket, coaching, onBackToJira }: CoachingPagePro
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="mb-6 text-2xl font-medium">AI Coaching Conversation</h1>
+      <h1 className="mb-6 text-2xl font-semibold">AI Coaching Conversation</h1>
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-[280px_1fr] sm:items-start">
         <Card className="p-5">
           <h2 className="mb-2 text-base font-medium">{ticket.title}</h2>
-          <p className="mb-4 text-sm leading-relaxed text-[color-mix(in_srgb,var(--color-text)_65%,transparent)]">
+          <p className="mb-4 text-sm leading-relaxed text-[var(--color-text-secondary)]">
             {ticket.description}
           </p>
           <div className="border-t border-[var(--color-divider)] pt-3.5">
-            <div className="mb-2 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
+            <div className="mb-2 text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
               Readiness
             </div>
             <div className="flex flex-col gap-1.5">
               {CRITERIA.map(({ key, label }) => (
                 <div key={key} className="flex items-center gap-2.5">
                   <ScoreBadge score={session.currentScores[key]} />
-                  <span className="text-xs text-[color-mix(in_srgb,var(--color-text)_65%,transparent)]">
+                  <span className="text-xs text-[var(--color-text-secondary)]">
                     {label}
                   </span>
                 </div>
@@ -230,7 +230,7 @@ export function CoachingPage({ ticket, coaching, onBackToJira }: CoachingPagePro
             <>
               <Card className="p-5">
                 <p className="text-[15px] leading-relaxed">Coaching complete.</p>
-                <p className="mt-1.5 text-sm text-[color-mix(in_srgb,var(--color-text)_60%,transparent)]">
+                <p className="mt-1.5 text-sm text-[var(--color-text-secondary)]">
                   {session.stopReason
                     ? (STOP_REASON_LABELS[session.stopReason] ?? session.stopReason)
                     : ''}

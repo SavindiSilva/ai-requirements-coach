@@ -38,11 +38,11 @@ export function FinalRequirementView({ result, ticket, onBackToJira }: FinalRequ
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Card className="p-5">
-          <div className="mb-2 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
+          <div className="mb-2 text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
             Original
           </div>
           <h3 className="mb-1.5 text-sm font-medium">{ticket.title}</h3>
-          <p className="text-sm leading-relaxed text-[color-mix(in_srgb,var(--color-text)_65%,transparent)]">
+          <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">
             {ticket.description}
           </p>
         </Card>
@@ -61,13 +61,13 @@ export function FinalRequirementView({ result, ticket, onBackToJira }: FinalRequ
       </div>
 
       <Card className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3">
-        <span className="text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
+        <span className="text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
           Readiness
         </span>
         {CRITERIA.map(({ key, label }) => (
           <span key={key} className="flex items-center gap-1.5">
             <ScoreBadge score={result.current_scores[key]} />
-            <span className="text-xs text-[color-mix(in_srgb,var(--color-text)_65%,transparent)]">{label}</span>
+            <span className="text-xs text-[var(--color-text-secondary)]">{label}</span>
           </span>
         ))}
       </Card>
@@ -111,20 +111,20 @@ export function FinalRequirementView({ result, ticket, onBackToJira }: FinalRequ
               <p className="mb-1.5 text-[15px] leading-relaxed text-[var(--color-success)]">
                 {issueKey} was updated in Jira.
               </p>
-              <p className="mb-4 text-sm text-[color-mix(in_srgb,var(--color-text)_60%,transparent)]">
+              <p className="mb-4 text-sm text-[var(--color-text-secondary)]">
                 The issue description now contains the full development-ready requirement above.
               </p>
               <Button onClick={onBackToJira}>Back to Issue List</Button>
             </>
           ) : (
             <>
-              <div className="mb-2 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
+              <div className="mb-2 text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
                 Push to Jira
               </div>
 
               {!showConfirm && (
                 <>
-                  <p className="mb-4 text-sm text-[color-mix(in_srgb,var(--color-text)_60%,transparent)]">
+                  <p className="mb-4 text-sm text-[var(--color-text-secondary)]">
                     Approving will overwrite the description of {issueKey} in Jira with the
                     development-ready requirement above. No other Jira fields are changed.
                   </p>

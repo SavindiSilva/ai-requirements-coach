@@ -9,16 +9,17 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 const base =
   'inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 py-2 ' +
   'text-sm font-medium font-[family-name:var(--font-heading)] cursor-pointer ' +
-  'transition-colors disabled:cursor-not-allowed disabled:opacity-[45%]';
+  'transition-[background-color,box-shadow,border-color,transform] duration-150 ' +
+  'active:translate-y-px disabled:cursor-not-allowed disabled:opacity-[45%] disabled:active:translate-y-0';
 
 const variants: Record<Variant, string> = {
   primary:
-    'bg-transparent border border-[var(--color-accent)] text-[var(--color-accent)] shadow-[var(--shadow-accent-glow)] ' +
-    'hover:bg-[color-mix(in_srgb,var(--color-accent)_12%,transparent)] ' +
-    'active:bg-[color-mix(in_srgb,var(--color-accent)_22%,transparent)]',
+    'border border-transparent bg-[var(--color-accent-600)] text-[var(--color-neutral-100)] shadow-[var(--shadow-button-primary)] ' +
+    'hover:bg-[color-mix(in_srgb,var(--color-accent-600)_88%,white)] hover:shadow-[var(--shadow-button-primary-hover)] ' +
+    'active:bg-[color-mix(in_srgb,var(--color-accent-600)_85%,black)]',
   secondary:
     'bg-transparent border border-[var(--color-divider)] text-[var(--color-text)] ' +
-    'hover:bg-[color-mix(in_srgb,var(--color-text)_10%,transparent)] ' +
+    'hover:border-[color-mix(in_srgb,var(--color-text)_32%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-text)_8%,transparent)] ' +
     'active:bg-[color-mix(in_srgb,var(--color-text)_14%,transparent)]',
 };
 

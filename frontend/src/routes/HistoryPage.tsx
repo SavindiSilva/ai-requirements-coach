@@ -23,8 +23,8 @@ export function HistoryPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="mb-1.5 text-2xl font-medium">History</h1>
-      <p className="mb-6 text-sm text-[color-mix(in_srgb,var(--color-text)_55%,transparent)]">
+      <h1 className="mb-1.5 text-2xl font-semibold">History</h1>
+      <p className="mb-6 text-sm text-[var(--color-text-secondary)]">
         Every ticket you've reviewed, most recent first.
       </p>
 
@@ -45,7 +45,7 @@ export function HistoryPage() {
               : 'No tickets match your search.'
         }
       />
-      <p className="mt-3 text-xs text-[color-mix(in_srgb,var(--color-text)_35%,transparent)]">
+      <p className="mt-3 text-xs text-[var(--color-text-tertiary)]">
         This history is stored on the backend server, so it survives a page refresh.
       </p>
     </div>

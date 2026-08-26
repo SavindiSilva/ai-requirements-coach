@@ -10,7 +10,14 @@
   --color-text: #e9e9ed;
   --color-accent: #9d90ea;
   --color-accent-2: #a7a1db;
+  --color-accent-600: #6c5ce7;
   --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
+  --color-border-subtle: color-mix(in srgb, #e9e9ed 9%, transparent);
+
+  /* Three deliberate text-opacity steps — every "muted" text color in the
+     app should reference one of these two, never a one-off color-mix. */
+  --color-text-secondary: color-mix(in srgb, var(--color-text) 70%, transparent);
+  --color-text-tertiary: color-mix(in srgb, var(--color-text) 46%, transparent);
 
   --color-neutral-100: #f3f5fe;
   --color-neutral-300: #cfd3e5;
@@ -27,7 +34,7 @@
   --color-danger: #e2867a;
 
   --font-heading: 'Inter', system-ui, sans-serif;
-  --font-heading-weight: 500;
+  --font-heading-weight: 600;
   --font-body: 'Inter', system-ui, sans-serif;
 
   --space-1: 2.8px;
@@ -37,11 +44,34 @@
   --space-6: 16.8px;
   --space-8: 22.4px;
 
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 14px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
 
-  --shadow-sm: 0 0 0 1px #3f424d;
+  /* Small containers (chat bubbles, inline panels) — a hint of lift plus a
+     hairline border, not just a faked border. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--color-border-subtle);
+
+  /* Real elevation for Card — shadow does the separating work, the border
+     is just a hairline so it doesn't fight the shadow. */
+  --shadow-card:
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 14px 32px -14px rgba(0, 0, 0, 0.6),
+    0 0 0 1px var(--color-border-subtle);
+  --shadow-card-hover:
+    0 2px 4px rgba(0, 0, 0, 0.5),
+    0 22px 44px -16px rgba(0, 0, 0, 0.65),
+    0 0 0 1px color-mix(in srgb, var(--color-accent) 30%, var(--color-border-subtle));
+
   --shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0, 0, 0, 0.55);
   --shadow-accent-glow: 0 0 18px color-mix(in srgb, var(--color-accent) 35%, transparent);
+
+  --shadow-button-primary:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 0 0 1px color-mix(in srgb, var(--color-accent-600) 60%, transparent),
+    0 8px 22px -6px color-mix(in srgb, var(--color-accent-600) 55%, transparent);
+  --shadow-button-primary-hover:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 0 0 1px color-mix(in srgb, var(--color-accent-600) 75%, transparent),
+    0 10px 28px -6px color-mix(in srgb, var(--color-accent-600) 70%, transparent);
 }

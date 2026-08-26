@@ -1,9 +1,25 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import 'tailwindcss';
 @import './styles/tokens.css';
 
 body {
   margin: 0;
-  background: var(--color-bg);
+  min-height: 100vh;
+  background-color: var(--color-bg);
+  background-image:
+    radial-gradient(
+      1100px 620px at 12% -8%,
+      color-mix(in srgb, var(--color-accent) 12%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      900px 640px at 105% 0%,
+      color-mix(in srgb, var(--color-accent-2) 8%, transparent),
+      transparent 55%
+    ),
+    linear-gradient(180deg, color-mix(in srgb, #ffffff 3%, transparent) 0%, transparent 320px);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
   color: var(--color-text);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;

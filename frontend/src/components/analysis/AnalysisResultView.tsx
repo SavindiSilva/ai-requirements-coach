@@ -6,6 +6,7 @@ import { FindingList } from './FindingList';
 import { ClarificationQuestions } from './ClarificationQuestions';
 import { formatScore } from '../../lib/format';
 import { READINESS_PASS_THRESHOLD } from '../../lib/readiness';
+import { badgeClasses } from '../../lib/badgeStyles';
 import type { AnalysisResult, TicketInput } from '../../lib/types/analysis';
 
 interface AnalysisResultViewProps {
@@ -44,20 +45,16 @@ export function AnalysisResultView({
     <div className="flex flex-col gap-6">
       <Card className="p-5">
         <h2 className="mb-1.5 text-base font-medium">{ticket.title}</h2>
-        <p className="mb-4 text-sm leading-relaxed text-[color-mix(in_srgb,var(--color-text)_65%,transparent)]">
+        <p className="mb-4 text-sm leading-relaxed text-[var(--color-text-secondary)]">
           {ticket.description}
         </p>
         <div>
-          <div className="mb-1 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
+          <div className="mb-1 text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
             Overall Readiness
           </div>
           <div className="flex items-center gap-3">
             <div className="text-2xl font-medium">{formatScore(result.overall_readiness)} / 3</div>
-            <span
-              className={`inline-flex items-center rounded-full bg-[var(--color-neutral-800)] px-2.5 py-1 text-xs font-medium ${
-                isReady ? 'text-[var(--color-success)]' : 'text-[var(--color-warning)]'
-              }`}
-            >
+            <span className={badgeClasses(isReady ? 'success' : 'warning')}>
               {isReady ? 'Ready' : 'Needs Clarification'}
             </span>
           </div>

@@ -42,7 +42,7 @@ export function ReviewTicketPage({ onFinishReview }: ReviewTicketPageProps) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-10">
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-medium">Requirement Analysis</h1>
+          <h1 className="text-2xl font-semibold">Requirement Analysis</h1>
           <Button variant="secondary" onClick={handleBackToJira}>
             Review Another Ticket
           </Button>
@@ -66,8 +66,8 @@ export function ReviewTicketPage({ onFinishReview }: ReviewTicketPageProps) {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="mb-1.5 text-2xl font-medium">Review a Ticket</h1>
-      <p className="mb-6 text-sm text-[color-mix(in_srgb,var(--color-text)_55%,transparent)]">
+      <h1 className="mb-1.5 text-2xl font-semibold">Review a Ticket</h1>
+      <p className="mb-6 text-sm text-[var(--color-text-secondary)]">
         Import a ticket from Jira and improve its requirements before development starts.
       </p>
 
@@ -88,7 +88,7 @@ export function ReviewTicketPage({ onFinishReview }: ReviewTicketPageProps) {
         />
 
         {mutation.isPending && (
-          <p className="text-sm text-[color-mix(in_srgb,var(--color-text)_60%,transparent)]">Analysing…</p>
+          <p className="text-sm text-[var(--color-text-secondary)]">Analysing…</p>
         )}
         {mutation.isError && (
           <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-3.5 py-3 text-sm text-[var(--color-danger)]">

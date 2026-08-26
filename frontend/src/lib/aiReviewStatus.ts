@@ -11,20 +11,27 @@
 // that hit max_questions_reached should read "Needs Clarification" even if
 // its average readiness happens to be >= the threshold).
 
+import { badgeClasses, type BadgeTone } from './badgeStyles';
+
 export const STOP_REASON_READY = 'readiness_threshold_met';
 export const STOP_REASON_NEEDS_CLARIFICATION = 'max_questions_reached';
 
 export interface AiReviewStatus {
   label: string;
-  colorClass: string;
+  tone: BadgeTone;
+  badgeClass: string;
 }
 
 export function getAiReviewStatus(stopReason: string | null | undefined): AiReviewStatus {
   if (stopReason === STOP_REASON_READY) {
-    return { label: 'Ready', colorClass: 'text-[var(--color-success)]' };
+    return { label: 'Ready', tone: 'success', badgeClass: badgeClasses('success', 'sm') };
   }
   if (stopReason === STOP_REASON_NEEDS_CLARIFICATION) {
-    return { label: 'Needs Clarification', colorClass: 'text-[var(--color-warning)]' };
+    return {
+      label: 'Needs Clarification',
+      tone: 'warning',
+      badgeClass: badgeClasses('warning', 'sm'),
+    };
   }
-  return { label: 'Not Reviewed', colorClass: 'text-[color-mix(in_srgb,var(--color-text)_55%,transparent)]' };
+  return { label: 'Not Reviewed', tone: 'neutral', badgeClass: badgeClasses('neutral', 'sm') };
 }

@@ -5,6 +5,7 @@ import { KnowledgeContextPanel } from '../knowledge/KnowledgeContextPanel';
 import { fieldInputClasses } from '../../lib/fieldStyles';
 import { formatScore } from '../../lib/format';
 import { getAiReviewStatus } from '../../lib/aiReviewStatus';
+import { badgeClasses, priorityTone } from '../../lib/badgeStyles';
 import { useJiraStatus } from '../../hooks/useJiraStatus';
 import { useJiraProjects } from '../../hooks/useJiraProjects';
 import { useJiraProjectIssues } from '../../hooks/useJiraProjectIssues';
@@ -31,7 +32,7 @@ function ErrorBanner({ error }: { error: unknown }) {
   );
 }
 
-const selectedCardClasses = 'shadow-[0_0_0_1px_var(--color-accent)]';
+const selectedCardClasses = 'outline outline-2 outline-[var(--color-accent-600)] outline-offset-[-1px]';
 
 export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -133,7 +134,7 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
   }
 
   if (statusQuery.isLoading) {
-    return <p className="text-sm text-[color-mix(in_srgb,var(--color-text)_60%,transparent)]">Checking Jira connection…</p>;
+    return <p className="text-sm text-[var(--color-text-secondary)]">Checking Jira connection…</p>;
   }
 
   if (statusQuery.isError) {
@@ -143,7 +144,7 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
   if (!connected) {
     return (
       <Card className="max-w-md p-5">
-        <p className="mb-4 text-sm leading-relaxed text-[color-mix(in_srgb,var(--color-text)_65%,transparent)]">
+        <p className="mb-4 text-sm leading-relaxed text-[var(--color-text-secondary)]">
           Connect your Jira account to import a ticket for review.
         </p>
         <Button onClick={handleConnect}>Connect Jira</Button>
@@ -173,11 +174,11 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
       <div className="flex flex-col gap-3">
         <h2 className="text-base font-medium">Select a Project</h2>
         {projectsQuery.isLoading && (
-          <p className="text-sm text-[color-mix(in_srgb,var(--color-text)_60%,transparent)]">Loading projects…</p>
+          <p className="text-sm text-[var(--color-text-secondary)]">Loading projects…</p>
         )}
         {projectsQuery.isError && <ErrorBanner error={projectsQuery.error} />}
         {projectsQuery.data && projectsQuery.data.length === 0 && (
-          <p className="text-sm text-[color-mix(in_srgb,var(--color-text)_40%,transparent)]">
+          <p className="text-sm text-[var(--color-text-tertiary)]">
             No accessible Jira projects were found.
           </p>
         )}
@@ -185,13 +186,13 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
           {projectsQuery.data?.map((project) => (
             <Card
               key={project.id}
-              className={`cursor-pointer p-4 hover:bg-[color-mix(in_srgb,var(--color-text)_6%,transparent)] ${
+              className={`cursor-pointer p-4 hover:-translate-y-0.5 hover:shadow-[var(--shadow-card-hover)] hover:bg-[color-mix(in_srgb,var(--color-text)_6%,transparent)] ${
                 project.id === selectedProjectId ? selectedCardClasses : ''
               }`}
               onClick={() => handleSelectProject(project.id)}
             >
               <div className="text-sm font-medium">{project.name}</div>
-              <div className="text-xs text-[color-mix(in_srgb,var(--color-text)_50%,transparent)]">{project.key}</div>
+              <div className="text-xs text-[var(--color-text-tertiary)]">{project.key}</div>
             </Card>
           ))}
         </div>
@@ -202,11 +203,11 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
           <div className="flex flex-col gap-3">
             <h2 className="text-base font-medium">Select an Issue</h2>
             {issuesQuery.isLoading && (
-              <p className="text-sm text-[color-mix(in_srgb,var(--color-text)_60%,transparent)]">Loading issues…</p>
+              <p className="text-sm text-[var(--color-text-secondary)]">Loading issues…</p>
             )}
             {issuesQuery.isError && <ErrorBanner error={issuesQuery.error} />}
             {issuesQuery.data && issuesQuery.data.length === 0 && (
-              <p className="text-sm text-[color-mix(in_srgb,var(--color-text)_40%,transparent)]">
+              <p className="text-sm text-[var(--color-text-tertiary)]">
                 No issues were found in this project.
               </p>
             )}
@@ -259,7 +260,7 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
                 </div>
 
                 <Card className="overflow-hidden p-0">
-                  <div className="grid grid-cols-[1fr_110px_120px_110px_130px_90px] gap-3 border-b border-[var(--color-divider)] px-4 py-2 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
+                  <div className="grid grid-cols-[1fr_110px_120px_110px_130px_90px] gap-3 border-b border-[var(--color-divider)] px-4 py-2 text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
                     <div>Ticket</div>
                     <div>Jira Status</div>
                     <div>Assignee</div>
@@ -274,36 +275,40 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
                       <div
                         key={issue.key}
                         onClick={() => setSelectedIssueKey(issue.key)}
-                        className={`grid cursor-pointer grid-cols-[1fr_110px_120px_110px_130px_90px] items-center gap-3 border-b border-[var(--color-divider)] px-4 py-3 last:border-b-0 hover:bg-[color-mix(in_srgb,var(--color-text)_6%,transparent)] ${
+                        className={`grid cursor-pointer grid-cols-[1fr_110px_120px_110px_130px_90px] items-center gap-3 border-b border-[var(--color-divider)] px-4 py-3 transition-colors duration-150 last:border-b-0 hover:bg-[color-mix(in_srgb,var(--color-text)_6%,transparent)] ${
                           issue.key === selectedIssueKey ? selectedCardClasses : ''
                         }`}
                       >
                         <div>
-                          <div className="text-xs text-[color-mix(in_srgb,var(--color-text)_50%,transparent)]">{issue.key}</div>
+                          <div className="text-xs text-[var(--color-text-tertiary)]">{issue.key}</div>
                           <div className="text-sm font-medium">{issue.summary}</div>
                         </div>
                         <div>
-                          <span className="inline-flex h-[20px] items-center rounded-[var(--radius-sm)] bg-[var(--color-neutral-800)] px-2 text-[11px] text-[color-mix(in_srgb,var(--color-text)_70%,transparent)]">
-                            {issue.status}
-                          </span>
+                          <span className={badgeClasses('neutral', 'sm')}>{issue.status}</span>
                         </div>
-                        <div className="truncate text-xs text-[color-mix(in_srgb,var(--color-text)_65%,transparent)]">
+                        <div className="truncate text-xs text-[var(--color-text-secondary)]">
                           {issue.assignee ?? 'Unassigned'}
                         </div>
-                        <div className="truncate text-xs text-[color-mix(in_srgb,var(--color-text)_65%,transparent)]">
-                          {issue.priority ?? '—'}
+                        <div>
+                          {issue.priority ? (
+                            <span className={badgeClasses(priorityTone(issue.priority), 'sm')}>
+                              {issue.priority}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-[var(--color-text-tertiary)]">—</span>
+                          )}
                         </div>
                         <div>
-                          <span className={`text-xs font-medium whitespace-nowrap ${aiReview.colorClass}`}>{aiReview.label}</span>
+                          <span className={aiReview.badgeClass}>{aiReview.label}</span>
                         </div>
-                        <div className="text-xs text-[color-mix(in_srgb,var(--color-text)_65%,transparent)]">
+                        <div className="text-xs text-[var(--color-text-secondary)]">
                           {reviewedTicket ? `${formatScore(reviewedTicket.readiness)}/3` : '—'}
                         </div>
                       </div>
                     );
                   })}
                   {filteredIssues && filteredIssues.length === 0 && (
-                    <div className="px-4 py-8 text-center text-sm text-[color-mix(in_srgb,var(--color-text)_40%,transparent)]">
+                    <div className="px-4 py-8 text-center text-sm text-[var(--color-text-tertiary)]">
                       No tickets match your filters.
                     </div>
                   )}
@@ -317,37 +322,35 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
               <>
                 {issueQuery.isLoading && (
                   <Card className="p-5">
-                    <p className="text-sm text-[color-mix(in_srgb,var(--color-text)_60%,transparent)]">Loading issue…</p>
+                    <p className="text-sm text-[var(--color-text-secondary)]">Loading issue…</p>
                   </Card>
                 )}
                 {issueQuery.isError && <ErrorBanner error={issueQuery.error} />}
                 {issueQuery.data && (
                   <Card className="p-5">
                     <div className="mb-2 flex items-center gap-2">
-                      <span className="text-xs text-[color-mix(in_srgb,var(--color-text)_50%,transparent)]">
+                      <span className="text-xs text-[var(--color-text-tertiary)]">
                         {issueQuery.data.key}
                       </span>
-                      <span className="inline-flex h-[20px] items-center rounded-[var(--radius-sm)] bg-[var(--color-neutral-800)] px-2 text-[11px] text-[color-mix(in_srgb,var(--color-text)_70%,transparent)]">
-                        {issueQuery.data.status}
-                      </span>
-                      <span className="text-[11px] text-[color-mix(in_srgb,var(--color-text)_45%,transparent)]">
+                      <span className={badgeClasses('neutral', 'sm')}>{issueQuery.data.status}</span>
+                      <span className="text-[11px] text-[var(--color-text-tertiary)]">
                         {issueQuery.data.issue_type}
                       </span>
                     </div>
                     <h3 className="mb-2 text-base font-medium">{issueQuery.data.summary}</h3>
-                    <p className="mb-4 whitespace-pre-wrap text-sm leading-relaxed text-[color-mix(in_srgb,var(--color-text)_65%,transparent)]">
+                    <p className="mb-4 whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-secondary)]">
                       {issueQuery.data.description || '(No description)'}
                     </p>
 
                     {issueQuery.data.links.length > 0 && (
                       <div className="mb-4 border-t border-[var(--color-divider)] pt-3.5">
-                        <div className="mb-2 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
+                        <div className="mb-2 text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
                           Related Jira Issues
                         </div>
-                        <ul className="flex flex-col gap-1 text-sm text-[color-mix(in_srgb,var(--color-text)_75%,transparent)]">
+                        <ul className="flex flex-col gap-1 text-sm text-[var(--color-text-secondary)]">
                           {issueQuery.data.links.map((link, i) => (
                             <li key={i}>
-                              <span className="text-[color-mix(in_srgb,var(--color-text)_50%,transparent)]">
+                              <span className="text-[var(--color-text-tertiary)]">
                                 {link.relationship}:
                               </span>{' '}
                               {link.key}
@@ -364,7 +367,7 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
               </>
             ) : (
               <Card className="p-8 text-center">
-                <p className="text-sm text-[color-mix(in_srgb,var(--color-text)_40%,transparent)]">
+                <p className="text-sm text-[var(--color-text-tertiary)]">
                   Select a ticket to preview details.
                 </p>
               </Card>

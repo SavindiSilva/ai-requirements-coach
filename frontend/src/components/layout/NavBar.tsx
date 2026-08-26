@@ -42,8 +42,8 @@ export function NavBar({ active, onNavigate }: NavBarProps) {
                 onClick={() => onNavigate(screen)}
                 className={`rounded-full px-[13px] py-1.5 text-[13.5px] transition-colors cursor-pointer ${
                   active === screen
-                    ? 'font-medium bg-[var(--color-accent-800)] text-[var(--color-accent-100)]'
-                    : 'font-normal text-[color-mix(in_srgb,var(--color-text)_65%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-text)_8%,transparent)] hover:text-[var(--color-text)]'
+                    ? 'font-medium bg-[color-mix(in_srgb,var(--color-accent-600)_24%,transparent)] text-[var(--color-accent-100)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-accent-600)_45%,transparent)]'
+                    : 'font-normal text-[var(--color-text-secondary)] hover:bg-[color-mix(in_srgb,var(--color-text)_8%,transparent)] hover:text-[var(--color-text)]'
                 }`}
               >
                 {label}
@@ -60,7 +60,7 @@ export function NavBar({ active, onNavigate }: NavBarProps) {
             <button
               type="button"
               onClick={() => void signOut()}
-              className="cursor-pointer text-[11px] whitespace-nowrap text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] hover:text-[var(--color-text)]"
+              className="cursor-pointer text-[11px] whitespace-nowrap text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]"
             >
               Sign out
             </button>

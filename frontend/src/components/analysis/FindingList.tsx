@@ -7,15 +7,15 @@ interface FindingListProps {
 export function FindingList({ title, items, emptyLabel = 'None identified.' }: FindingListProps) {
   return (
     <div>
-      <h3 className="mb-2 text-[10.5px] font-medium tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
+      <h3 className="mb-2 text-[10.5px] font-medium tracking-wide text-[var(--color-text-tertiary)] uppercase">
         {title}
       </h3>
       {items.length === 0 ? (
-        <p className="text-sm text-[color-mix(in_srgb,var(--color-text)_40%,transparent)]">
+        <p className="text-sm text-[var(--color-text-tertiary)]">
           {emptyLabel}
         </p>
       ) : (
-        <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-[color-mix(in_srgb,var(--color-text)_80%,transparent)]">
+        <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-[var(--color-text-secondary)]">
           {items.map((item, i) => (
             <li key={i}>{item}</li>
           ))}

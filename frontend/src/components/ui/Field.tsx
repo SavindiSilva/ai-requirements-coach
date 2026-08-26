@@ -12,7 +12,7 @@ export function Field({ label, htmlFor, error, children }: FieldProps) {
     <div className="mb-4">
       <label
         htmlFor={htmlFor}
-        className="mb-1.5 block text-xs text-[color-mix(in_srgb,var(--color-text)_70%,transparent)]"
+        className="mb-1.5 block text-xs text-[var(--color-text-secondary)]"
       >
         {label}
       </label>

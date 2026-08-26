@@ -26,10 +26,10 @@ export function DashboardPage({ onStartReview, onViewHistory }: DashboardPagePro
         <span className="mb-4 inline-flex w-max items-center rounded-full border border-[var(--color-accent)] px-3 py-1 text-[10px] font-medium tracking-[0.08em] text-[var(--color-accent)] uppercase">
           ReqPilot
         </span>
-        <h1 className="mb-1.5 text-2xl font-medium">
+        <h1 className="mb-1.5 text-2xl font-semibold">
           Improve your software requirements before development starts
         </h1>
-        <p className="mb-6 text-sm text-[color-mix(in_srgb,var(--color-text)_55%,transparent)]">
+        <p className="mb-6 text-sm text-[var(--color-text-secondary)]">
           Import a ticket from Jira and get an AI-powered readiness analysis before development
           begins.
         </p>
@@ -37,23 +37,23 @@ export function DashboardPage({ onStartReview, onViewHistory }: DashboardPagePro
       </Card>
 
       <div className="mb-6 grid grid-cols-1 gap-3.5 sm:grid-cols-3">
-        <Card className="p-5">
-          <div className="mb-2.5 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
+        <Card className="p-5 transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-[var(--shadow-card-hover)]">
+          <div className="mb-2.5 text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
             Tickets Reviewed
           </div>
-          <div className="text-[28px] font-medium tracking-tight">{ticketsReviewed}</div>
+          <div className="text-[28px] font-semibold tracking-tight">{ticketsReviewed}</div>
         </Card>
-        <Card className="p-5">
-          <div className="mb-2.5 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
+        <Card className="p-5 transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-[var(--shadow-card-hover)]">
+          <div className="mb-2.5 text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
             Average Readiness Score
           </div>
-          <div className="text-[28px] font-medium tracking-tight">{averageReadinessLabel}</div>
+          <div className="text-[28px] font-semibold tracking-tight">{averageReadinessLabel}</div>
         </Card>
-        <Card className="p-5">
-          <div className="mb-2.5 text-[10.5px] tracking-wide text-[color-mix(in_srgb,var(--color-text)_45%,transparent)] uppercase">
+        <Card className="p-5 transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-[var(--shadow-card-hover)]">
+          <div className="mb-2.5 text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
             Tickets Ready
           </div>
-          <div className="text-[28px] font-medium tracking-tight">{ticketsReady}</div>
+          <div className="text-[28px] font-semibold tracking-tight">{ticketsReady}</div>
         </Card>
       </div>
 
@@ -71,7 +71,7 @@ export function DashboardPage({ onStartReview, onViewHistory }: DashboardPagePro
         reviewedTickets={reviewedTickets}
         emptyMessage={reviewedTicketsQuery.isLoading ? 'Loading…' : 'No tickets reviewed yet.'}
       />
-      <p className="mt-3 text-xs text-[color-mix(in_srgb,var(--color-text)_35%,transparent)]">
+      <p className="mt-3 text-xs text-[var(--color-text-tertiary)]">
         This history is stored on the backend server, so it survives a page refresh.
       </p>
     </div>
