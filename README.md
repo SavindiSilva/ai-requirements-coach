@@ -1,3 +1,5 @@
+<img src="frontend/public/favicon.svg" alt="ReqPilot logo" width="64" height="64" />
+
 # ReqPilot
 
 An AI assistant that helps startup software teams turn vague Jira tickets

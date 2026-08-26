@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Field } from '../components/ui/Field';
+import { Logo } from '../components/ui/Logo';
 import { fieldInputClasses } from '../lib/fieldStyles';
 import { useAuth } from '../lib/auth';
 
@@ -54,9 +55,7 @@ export function LoginPage() {
       <div className="dot-grid-bg hidden flex-1 flex-col justify-between px-14 py-14 lg:flex">
         <div>
           <div className="mb-9 flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--color-accent)] text-sm font-medium text-[var(--color-neutral-100)]">
-              ✦
-            </div>
+            <Logo className="h-7 w-7 flex-none" />
             <div className="text-base font-medium tracking-[-0.01em]">ReqPilot</div>
           </div>
 

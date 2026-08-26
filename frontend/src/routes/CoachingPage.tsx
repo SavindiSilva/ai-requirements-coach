@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Field } from '../components/ui/Field';
+import { Logo } from '../components/ui/Logo';
 import { fieldInputClasses } from '../lib/fieldStyles';
 import { ScoreBadge } from '../components/analysis/ScoreBadge';
 import { FinalRequirementView } from '../components/coaching/FinalRequirementView';
@@ -11,6 +12,7 @@ import { useRecordReviewedTicket } from '../hooks/useRecordReviewedTicket';
 import { ApiError } from '../lib/api/client';
 import type { CoachingStartResponse, CurrentScores } from '../lib/types/coaching';
 import type { TicketInput } from '../lib/types/analysis';
+import { useAuth } from '../lib/auth';
 
 interface CoachingPageProps {
   ticket: TicketInput;
@@ -51,22 +53,29 @@ const STOP_REASON_LABELS: Record<string, string> = {
   readiness_threshold_met: 'Readiness threshold met — this ticket is sufficiently clear.',
 };
 
-// Reuses the exact icon/avatar treatments already established in
-// NavBar.tsx: the accent-circle "✦" app mark for the AI side, and the
-// bordered neutral-circle initials for the user side (same hardcoded "SS"
-// demo user — there is no real auth/user model to derive initials from).
+function initialsFromEmail(email: string): string {
+  const local = email.split('@')[0] ?? email;
+  const parts = local.split(/[._-]+/).filter(Boolean);
+  const chars =
+    parts.length >= 2
+      ? [parts[0][0], parts[1][0]]
+      : [local.slice(0, 2)];
+
+  return chars.join('').slice(0, 2).toUpperCase();
+}
+
 function AiAvatar() {
   return (
-    <div className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-[var(--color-accent)] text-xs font-medium text-[var(--color-neutral-100)]">
-      ✦
+    <div className="flex h-7 w-7 flex-none items-center justify-center">
+      <Logo className="h-7 w-7" />
     </div>
   );
 }
 
-function UserAvatar() {
+function UserAvatar({ initials }: { initials: string }) {
   return (
     <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--color-text)_16%,transparent)] bg-[var(--color-neutral-900)] text-[11px] font-medium text-[var(--color-accent-300)]">
-      SS
+      {initials}
     </span>
   );
 }
@@ -76,25 +85,45 @@ function AiMessage({ why, question }: { why: string; question: string }) {
     <div className="flex items-start gap-2.5">
       <AiAvatar />
       <div className="max-w-[85%] rounded-[var(--radius-md)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-sm)]">
-        {why && <p className="mb-1.5 text-xs text-[var(--color-accent-300)]">Why this matters — {why}</p>}
+        {why && (
+          <p className="mb-1.5 text-xs text-[var(--color-accent-300)]">
+            Why this matters — {why}
+          </p>
+        )}
         <p className="text-sm leading-relaxed">{question}</p>
       </div>
     </div>
   );
 }
 
-function UserMessage({ answer }: { answer: string }) {
+function UserMessage({
+  answer,
+  initials,
+}: {
+  answer: string;
+  initials: string;
+}) {
   return (
     <div className="flex items-start justify-end gap-2.5">
       <div className="max-w-[85%] rounded-[var(--radius-md)] bg-[var(--color-accent-800)] p-4 shadow-[var(--shadow-sm)]">
-        <p className="text-sm leading-relaxed text-[var(--color-accent-100)]">{answer}</p>
+        <p className="text-sm leading-relaxed text-[var(--color-accent-100)]">
+          {answer}
+        </p>
       </div>
-      <UserAvatar />
+      <UserAvatar initials={initials} />
     </div>
   );
 }
 
-export function CoachingPage({ ticket, coaching, onBackToJira }: CoachingPageProps) {
+export function CoachingPage({
+  ticket,
+  coaching,
+  onBackToJira,
+}: CoachingPageProps) {
+  const { session: authSession } = useAuth();
+  const email = authSession?.user.email ?? '';
+  const userInitials = email ? initialsFromEmail(email) : '';
+
   const [session, setSession] = useState<SessionState>(() => ({
     question: coaching.question,
     why: coaching.why,
@@ -105,9 +134,11 @@ export function CoachingPage({ ticket, coaching, onBackToJira }: CoachingPagePro
     isComplete: false,
     stopReason: null,
   }));
+
   const [history, setHistory] = useState<ConversationTurn[]>([]);
   const [answer, setAnswer] = useState('');
   const [answerError, setAnswerError] = useState<string | undefined>();
+
   const submitMutation = useSubmitCoachingAnswer();
   const finalizeMutation = useFinalizeCoaching();
   const recordReviewedTicketMutation = useRecordReviewedTicket();
@@ -122,6 +153,7 @@ export function CoachingPage({ ticket, coaching, onBackToJira }: CoachingPagePro
             scores.open_questions +
             scores.scope_definition) /
           4;
+
         recordReviewedTicketMutation.mutate({
           issueKey: ticket.source_issue_key ?? undefined,
           title: ticket.title,
@@ -135,10 +167,12 @@ export function CoachingPage({ ticket, coaching, onBackToJira }: CoachingPagePro
 
   function handleSubmitAnswer(e: FormEvent) {
     e.preventDefault();
+
     if (!answer.trim()) {
       setAnswerError('Answer is required.');
       return;
     }
+
     setAnswerError(undefined);
 
     const questionJustAnswered = session.question;
@@ -152,9 +186,14 @@ export function CoachingPage({ ticket, coaching, onBackToJira }: CoachingPagePro
           if (questionJustAnswered !== null) {
             setHistory((prev) => [
               ...prev,
-              { question: questionJustAnswered, why: whyJustAnswered, answer: answerJustSubmitted },
+              {
+                question: questionJustAnswered,
+                why: whyJustAnswered,
+                answer: answerJustSubmitted,
+              },
             ]);
           }
+
           setSession({
             question: result.question,
             why: result.why,
@@ -165,6 +204,7 @@ export function CoachingPage({ ticket, coaching, onBackToJira }: CoachingPagePro
             isComplete: result.isComplete,
             stopReason: result.stopReason,
           });
+
           setAnswer('');
         },
       },
@@ -181,7 +221,10 @@ export function CoachingPage({ ticket, coaching, onBackToJira }: CoachingPagePro
   if (finalizeMutation.isSuccess) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-10">
-        <h1 className="mb-6 text-2xl font-semibold">Development-Ready Requirement</h1>
+        <h1 className="mb-6 text-2xl font-semibold">
+          Development-Ready Requirement
+        </h1>
+
         <FinalRequirementView
           result={finalizeMutation.data}
           ticket={ticket}
@@ -193,22 +236,28 @@ export function CoachingPage({ ticket, coaching, onBackToJira }: CoachingPagePro
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="mb-6 text-2xl font-semibold">AI Coaching Conversation</h1>
+      <h1 className="mb-6 text-2xl font-semibold">
+        AI Coaching Conversation
+      </h1>
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-[280px_1fr] sm:items-start">
         <Card className="p-5">
           <h2 className="mb-2 text-base font-medium">{ticket.title}</h2>
+
           <p className="mb-4 text-sm leading-relaxed text-[var(--color-text-secondary)]">
             {ticket.description}
           </p>
+
           <div className="border-t border-[var(--color-divider)] pt-3.5">
             <div className="mb-2 text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
               Readiness
             </div>
+
             <div className="flex flex-col gap-1.5">
               {CRITERIA.map(({ key, label }) => (
                 <div key={key} className="flex items-center gap-2.5">
                   <ScoreBadge score={session.currentScores[key]} />
+
                   <span className="text-xs text-[var(--color-text-secondary)]">
                     {label}
                   </span>
@@ -222,17 +271,25 @@ export function CoachingPage({ ticket, coaching, onBackToJira }: CoachingPagePro
           {history.map((turn, i) => (
             <div key={i} className="flex flex-col gap-3">
               <AiMessage why={turn.why} question={turn.question} />
-              <UserMessage answer={turn.answer} />
+
+              <UserMessage
+                answer={turn.answer}
+                initials={userInitials}
+              />
             </div>
           ))}
 
           {session.isComplete ? (
             <>
               <Card className="p-5">
-                <p className="text-[15px] leading-relaxed">Coaching complete.</p>
+                <p className="text-[15px] leading-relaxed">
+                  Coaching complete.
+                </p>
+
                 <p className="mt-1.5 text-sm text-[var(--color-text-secondary)]">
                   {session.stopReason
-                    ? (STOP_REASON_LABELS[session.stopReason] ?? session.stopReason)
+                    ? (STOP_REASON_LABELS[session.stopReason] ??
+                      session.stopReason)
                     : ''}
                 </p>
               </Card>
@@ -245,7 +302,10 @@ export function CoachingPage({ ticket, coaching, onBackToJira }: CoachingPagePro
                 </div>
               )}
 
-              <Button onClick={handleFinalize} disabled={finalizeMutation.isPending}>
+              <Button
+                onClick={handleFinalize}
+                disabled={finalizeMutation.isPending}
+              >
                 {finalizeMutation.isPending
                   ? 'Generating…'
                   : finalizeMutation.isError
@@ -255,19 +315,31 @@ export function CoachingPage({ ticket, coaching, onBackToJira }: CoachingPagePro
             </>
           ) : (
             <>
-              <AiMessage why={session.why ?? ''} question={session.question ?? ''} />
+              <AiMessage
+                why={session.why ?? ''}
+                question={session.question ?? ''}
+              />
 
               <div className="flex items-start justify-end gap-2.5">
-                <form onSubmit={handleSubmitAnswer} className="max-w-[85%] flex-1">
+                <form
+                  onSubmit={handleSubmitAnswer}
+                  className="max-w-[85%] flex-1"
+                >
                   <div className="rounded-[var(--radius-md)] bg-[var(--color-neutral-900)] p-4 shadow-[var(--shadow-sm)]">
-                    <Field label="Your Answer" htmlFor="answer" error={answerError}>
+                    <Field
+                      label="Your Answer"
+                      htmlFor="answer"
+                      error={answerError}
+                    >
                       <textarea
                         id="answer"
                         value={answer}
                         onChange={(e) => setAnswer(e.target.value)}
                         placeholder="Type your answer..."
                         rows={4}
-                        className={`${fieldInputClasses(!!answerError)} resize-y`}
+                        className={`${fieldInputClasses(
+                          !!answerError,
+                        )} resize-y`}
                         disabled={submitMutation.isPending}
                       />
                     </Field>
@@ -280,12 +352,18 @@ export function CoachingPage({ ticket, coaching, onBackToJira }: CoachingPagePro
                       </div>
                     )}
 
-                    <Button type="submit" disabled={submitMutation.isPending}>
-                      {submitMutation.isPending ? 'Submitting…' : 'Submit Answer'}
+                    <Button
+                      type="submit"
+                      disabled={submitMutation.isPending}
+                    >
+                      {submitMutation.isPending
+                        ? 'Submitting…'
+                        : 'Submit Answer'}
                     </Button>
                   </div>
                 </form>
-                <UserAvatar />
+
+                <UserAvatar initials={userInitials} />
               </div>
             </>
           )}
