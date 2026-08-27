@@ -46,21 +46,21 @@ export function KnowledgeContextPanel({ projectId }: KnowledgeContextPanelProps)
     <Card className="p-5">
       <div className="mb-2.5 flex items-center gap-2">
         <div className="text-sm font-medium">Relevant Company &amp; Project Knowledge</div>
-        <span className="inline-flex items-center rounded-[5px] border border-[var(--color-divider)] px-2 py-0.5 text-[10px] text-[var(--color-text-tertiary)]">
+        <span className="inline-flex items-center rounded-[var(--radius-sm)] border border-[var(--color-border-subtle)] px-2 py-0.5 text-[10px] text-[var(--color-text-muted)]">
           Optional
         </span>
       </div>
-      <p className="mb-3.5 text-[12.5px] leading-relaxed text-[var(--color-text-tertiary)]">
+      <p className="mb-3.5 text-[12.5px] leading-relaxed text-[var(--color-text-muted)]">
         AI can use relevant company and project guidelines when analysing this ticket.
       </p>
 
       <div className="mb-3.5 flex flex-col gap-1.5 text-sm">
         {documentsQuery.isLoading ? (
-          <p className="text-[12.5px] text-[var(--color-text-tertiary)]">
+          <p className="text-[12.5px] text-[var(--color-text-muted)]">
             Loading documents…
           </p>
         ) : documents.length === 0 ? (
-          <p className="text-[12.5px] text-[var(--color-text-tertiary)]">
+          <p className="text-[12.5px] text-[var(--color-text-muted)]">
             No documents uploaded yet.
           </p>
         ) : (
@@ -73,7 +73,7 @@ export function KnowledgeContextPanel({ projectId }: KnowledgeContextPanelProps)
       </div>
 
       {documents.length > 0 && (
-        <div className="mb-3 text-xs text-[var(--color-text-tertiary)]">
+        <div className="mb-3 text-xs text-[var(--color-text-muted)]">
           {documents.length} relevant document{documents.length === 1 ? '' : 's'} available
         </div>
       )}
@@ -104,16 +104,16 @@ export function KnowledgeContextPanel({ projectId }: KnowledgeContextPanelProps)
             }}
             onDragLeave={() => setIsDragOver(false)}
             onDrop={handleDrop}
-            className={`cursor-pointer rounded-[var(--radius-md)] border border-dashed p-4 text-center transition-colors ${
+            className={`cursor-pointer rounded-[var(--radius-xl)] border border-dashed p-4 text-center transition-colors ${
               isDragOver
                 ? 'border-[var(--color-accent)] bg-[color-mix(in_srgb,var(--color-accent)_8%,transparent)]'
                 : 'border-[color-mix(in_srgb,var(--color-text)_20%,transparent)]'
             } ${mutation.isPending ? 'pointer-events-none opacity-60' : ''}`}
           >
-            <div className="mb-1 text-[12.5px] text-[var(--color-text-tertiary)]">
+            <div className="mb-1 text-[12.5px] text-[var(--color-text-muted)]">
               {mutation.isPending ? 'Uploading…' : 'Drop files here or click to upload'}
             </div>
-            <div className="text-[11px] text-[var(--color-text-tertiary)]">
+            <div className="text-[11px] text-[var(--color-text-muted)]">
               PDF · DOCX · TXT · MD
             </div>
             <input
@@ -127,7 +127,7 @@ export function KnowledgeContextPanel({ projectId }: KnowledgeContextPanelProps)
           </div>
 
           {mutation.isError && (
-            <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-3.5 py-3 text-sm text-[var(--color-danger)]">
+            <div className="rounded-[var(--radius-xl)] border border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-3.5 py-3 text-sm text-[var(--color-danger)]">
               {mutation.error instanceof ApiError ? mutation.error.message : 'Upload failed. Please try again.'}
             </div>
           )}

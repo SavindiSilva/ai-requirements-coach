@@ -6,6 +6,6 @@ const inputClasses =
 export function fieldInputClasses(hasError: boolean): string {
   const borderColor = hasError
     ? 'border-[var(--color-danger)]'
-    : 'border-[var(--color-divider)] hover:border-[var(--color-text-tertiary)]';
+    : 'border-[var(--color-border-input)] hover:border-[var(--color-text-muted)]';
   return `${inputClasses} ${borderColor}`;
 }

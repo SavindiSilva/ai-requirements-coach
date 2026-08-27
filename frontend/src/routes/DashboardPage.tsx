@@ -29,7 +29,7 @@ export function DashboardPage({ onStartReview, onViewHistory }: DashboardPagePro
         <h1 className="mb-1.5 text-2xl font-semibold">
           Improve your software requirements before development starts
         </h1>
-        <p className="mb-6 text-sm text-[var(--color-text-secondary)]">
+        <p className="mb-6 text-sm text-[var(--color-text-muted)]">
           Import a ticket from Jira and get an AI-powered readiness analysis before development
           begins.
         </p>
@@ -38,22 +38,28 @@ export function DashboardPage({ onStartReview, onViewHistory }: DashboardPagePro
 
       <div className="mb-6 grid grid-cols-1 gap-3.5 sm:grid-cols-3">
         <Card className="p-5 transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-[var(--shadow-card-hover)]">
-          <div className="mb-2.5 text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
+          <div className="mb-2.5 text-[10.5px] tracking-wide text-[var(--color-text-muted)] uppercase">
             Tickets Reviewed
           </div>
-          <div className="text-[28px] font-semibold tracking-tight">{ticketsReviewed}</div>
+          <div className="font-[family-name:var(--font-mono)] text-[28px] font-semibold tracking-tight tabular-nums">
+            {ticketsReviewed}
+          </div>
         </Card>
         <Card className="p-5 transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-[var(--shadow-card-hover)]">
-          <div className="mb-2.5 text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
+          <div className="mb-2.5 text-[10.5px] tracking-wide text-[var(--color-text-muted)] uppercase">
             Average Readiness Score
           </div>
-          <div className="text-[28px] font-semibold tracking-tight">{averageReadinessLabel}</div>
+          <div className="font-[family-name:var(--font-mono)] text-[28px] font-semibold tracking-tight tabular-nums">
+            {averageReadinessLabel}
+          </div>
         </Card>
         <Card className="p-5 transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-[var(--shadow-card-hover)]">
-          <div className="mb-2.5 text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
+          <div className="mb-2.5 text-[10.5px] tracking-wide text-[var(--color-text-muted)] uppercase">
             Tickets Ready
           </div>
-          <div className="text-[28px] font-semibold tracking-tight">{ticketsReady}</div>
+          <div className="font-[family-name:var(--font-mono)] text-[28px] font-semibold tracking-tight tabular-nums">
+            {ticketsReady}
+          </div>
         </Card>
       </div>
 
@@ -71,7 +77,7 @@ export function DashboardPage({ onStartReview, onViewHistory }: DashboardPagePro
         reviewedTickets={reviewedTickets}
         emptyMessage={reviewedTicketsQuery.isLoading ? 'Loading…' : 'No tickets reviewed yet.'}
       />
-      <p className="mt-3 text-xs text-[var(--color-text-tertiary)]">
+      <p className="mt-3 text-xs text-[var(--color-text-muted)]">
         This history is stored on the backend server, so it survives a page refresh.
       </p>
     </div>

@@ -26,7 +26,7 @@ interface JiraImportFlowProps {
 
 function ErrorBanner({ error }: { error: unknown }) {
   return (
-    <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-3.5 py-3 text-sm text-[var(--color-danger)]">
+    <div className="rounded-[var(--radius-xl)] border border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-3.5 py-3 text-sm text-[var(--color-danger)]">
       {error instanceof ApiError ? error.message : 'Something went wrong. Please try again.'}
     </div>
   );
@@ -134,7 +134,7 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
   }
 
   if (statusQuery.isLoading) {
-    return <p className="text-sm text-[var(--color-text-secondary)]">Checking Jira connection…</p>;
+    return <p className="text-sm text-[var(--color-text-muted)]">Checking Jira connection…</p>;
   }
 
   if (statusQuery.isError) {
@@ -144,7 +144,7 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
   if (!connected) {
     return (
       <Card className="max-w-md p-5">
-        <p className="mb-4 text-sm leading-relaxed text-[var(--color-text-secondary)]">
+        <p className="mb-4 text-sm leading-relaxed text-[var(--color-text-muted)]">
           Connect your Jira account to import a ticket for review.
         </p>
         <Button onClick={handleConnect}>Connect Jira</Button>
@@ -174,11 +174,11 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
       <div className="flex flex-col gap-3">
         <h2 className="text-base font-medium">Select a Project</h2>
         {projectsQuery.isLoading && (
-          <p className="text-sm text-[var(--color-text-secondary)]">Loading projects…</p>
+          <p className="text-sm text-[var(--color-text-muted)]">Loading projects…</p>
         )}
         {projectsQuery.isError && <ErrorBanner error={projectsQuery.error} />}
         {projectsQuery.data && projectsQuery.data.length === 0 && (
-          <p className="text-sm text-[var(--color-text-tertiary)]">
+          <p className="text-sm text-[var(--color-text-muted)]">
             No accessible Jira projects were found.
           </p>
         )}
@@ -192,7 +192,9 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
               onClick={() => handleSelectProject(project.id)}
             >
               <div className="text-sm font-medium">{project.name}</div>
-              <div className="text-xs text-[var(--color-text-tertiary)]">{project.key}</div>
+              <div className="font-[family-name:var(--font-mono)] text-xs tabular-nums text-[var(--color-text-muted)]">
+                {project.key}
+              </div>
             </Card>
           ))}
         </div>
@@ -203,11 +205,11 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
           <div className="flex flex-col gap-3">
             <h2 className="text-base font-medium">Select an Issue</h2>
             {issuesQuery.isLoading && (
-              <p className="text-sm text-[var(--color-text-secondary)]">Loading issues…</p>
+              <p className="text-sm text-[var(--color-text-muted)]">Loading issues…</p>
             )}
             {issuesQuery.isError && <ErrorBanner error={issuesQuery.error} />}
             {issuesQuery.data && issuesQuery.data.length === 0 && (
-              <p className="text-sm text-[var(--color-text-tertiary)]">
+              <p className="text-sm text-[var(--color-text-muted)]">
                 No issues were found in this project.
               </p>
             )}
@@ -260,7 +262,7 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
                 </div>
 
                 <Card className="overflow-hidden p-0">
-                  <div className="grid grid-cols-[1fr_110px_120px_110px_130px_90px] gap-3 border-b border-[var(--color-divider)] px-4 py-2 text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
+                  <div className="grid grid-cols-[1fr_110px_120px_110px_130px_90px] gap-3 border-b border-[var(--color-border-subtle)] px-4 py-2 text-[10.5px] tracking-wide text-[var(--color-text-muted)] uppercase">
                     <div>Ticket</div>
                     <div>Jira Status</div>
                     <div>Assignee</div>
@@ -275,18 +277,20 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
                       <div
                         key={issue.key}
                         onClick={() => setSelectedIssueKey(issue.key)}
-                        className={`grid cursor-pointer grid-cols-[1fr_110px_120px_110px_130px_90px] items-center gap-3 border-b border-[var(--color-divider)] px-4 py-3 transition-colors duration-150 last:border-b-0 hover:bg-[color-mix(in_srgb,var(--color-text)_6%,transparent)] ${
+                        className={`grid cursor-pointer grid-cols-[1fr_110px_120px_110px_130px_90px] items-center gap-3 border-b border-[var(--color-border-subtle)] px-4 py-3 transition-colors duration-150 last:border-b-0 hover:bg-[color-mix(in_srgb,var(--color-text)_6%,transparent)] ${
                           issue.key === selectedIssueKey ? selectedCardClasses : ''
                         }`}
                       >
                         <div>
-                          <div className="text-xs text-[var(--color-text-tertiary)]">{issue.key}</div>
+                          <div className="font-[family-name:var(--font-mono)] text-xs tabular-nums text-[var(--color-text-muted)]">
+                            {issue.key}
+                          </div>
                           <div className="text-sm font-medium">{issue.summary}</div>
                         </div>
                         <div>
                           <span className={badgeClasses('neutral', 'sm')}>{issue.status}</span>
                         </div>
-                        <div className="truncate text-xs text-[var(--color-text-secondary)]">
+                        <div className="truncate text-xs text-[var(--color-text-muted)]">
                           {issue.assignee ?? 'Unassigned'}
                         </div>
                         <div>
@@ -295,20 +299,20 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
                               {issue.priority}
                             </span>
                           ) : (
-                            <span className="text-xs text-[var(--color-text-tertiary)]">—</span>
+                            <span className="text-xs text-[var(--color-text-muted)]">—</span>
                           )}
                         </div>
                         <div>
                           <span className={aiReview.badgeClass}>{aiReview.label}</span>
                         </div>
-                        <div className="text-xs text-[var(--color-text-secondary)]">
+                        <div className="font-[family-name:var(--font-mono)] text-xs tabular-nums text-[var(--color-text-muted)]">
                           {reviewedTicket ? `${formatScore(reviewedTicket.readiness)}/3` : '—'}
                         </div>
                       </div>
                     );
                   })}
                   {filteredIssues && filteredIssues.length === 0 && (
-                    <div className="px-4 py-8 text-center text-sm text-[var(--color-text-tertiary)]">
+                    <div className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
                       No tickets match your filters.
                     </div>
                   )}
@@ -322,38 +326,40 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
               <>
                 {issueQuery.isLoading && (
                   <Card className="p-5">
-                    <p className="text-sm text-[var(--color-text-secondary)]">Loading issue…</p>
+                    <p className="text-sm text-[var(--color-text-muted)]">Loading issue…</p>
                   </Card>
                 )}
                 {issueQuery.isError && <ErrorBanner error={issueQuery.error} />}
                 {issueQuery.data && (
                   <Card className="p-5">
                     <div className="mb-2 flex items-center gap-2">
-                      <span className="text-xs text-[var(--color-text-tertiary)]">
+                      <span className="font-[family-name:var(--font-mono)] text-xs tabular-nums text-[var(--color-text-muted)]">
                         {issueQuery.data.key}
                       </span>
                       <span className={badgeClasses('neutral', 'sm')}>{issueQuery.data.status}</span>
-                      <span className="text-[11px] text-[var(--color-text-tertiary)]">
+                      <span className="text-[11px] text-[var(--color-text-muted)]">
                         {issueQuery.data.issue_type}
                       </span>
                     </div>
                     <h3 className="mb-2 text-base font-medium">{issueQuery.data.summary}</h3>
-                    <p className="mb-4 whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-secondary)]">
+                    <p className="mb-4 whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-muted)]">
                       {issueQuery.data.description || '(No description)'}
                     </p>
 
                     {issueQuery.data.links.length > 0 && (
-                      <div className="mb-4 border-t border-[var(--color-divider)] pt-3.5">
-                        <div className="mb-2 text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
+                      <div className="mb-4 border-t border-[var(--color-border-subtle)] pt-3.5">
+                        <div className="mb-2 text-[10.5px] tracking-wide text-[var(--color-text-muted)] uppercase">
                           Related Jira Issues
                         </div>
-                        <ul className="flex flex-col gap-1 text-sm text-[var(--color-text-secondary)]">
+                        <ul className="flex flex-col gap-1 text-sm text-[var(--color-text-muted)]">
                           {issueQuery.data.links.map((link, i) => (
                             <li key={i}>
-                              <span className="text-[var(--color-text-tertiary)]">
+                              <span className="text-[var(--color-text-muted)]">
                                 {link.relationship}:
                               </span>{' '}
-                              {link.key}
+                              <span className="font-[family-name:var(--font-mono)] tabular-nums">
+                                {link.key}
+                              </span>
                               {link.summary ? ` — ${link.summary}` : ''}
                             </li>
                           ))}
@@ -367,7 +373,7 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
               </>
             ) : (
               <Card className="p-8 text-center">
-                <p className="text-sm text-[var(--color-text-tertiary)]">
+                <p className="text-sm text-[var(--color-text-muted)]">
                   Select a ticket to preview details.
                 </p>
               </Card>

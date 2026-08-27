@@ -30,7 +30,7 @@ export function NavBar({ active, onNavigate }: NavBarProps) {
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2.5">
             <Logo className="h-6 w-6 flex-none" />
-            <span className="text-sm font-medium font-[family-name:var(--font-heading)]">
+            <span className="text-sm font-medium font-[family-name:var(--font-body)]">
               ReqPilot
             </span>
           </div>
@@ -41,8 +41,8 @@ export function NavBar({ active, onNavigate }: NavBarProps) {
                 onClick={() => onNavigate(screen)}
                 className={`rounded-full px-[13px] py-1.5 text-[13.5px] transition-colors cursor-pointer ${
                   active === screen
-                    ? 'font-medium bg-[color-mix(in_srgb,var(--color-accent-600)_24%,transparent)] text-[var(--color-accent-100)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-accent-600)_45%,transparent)]'
-                    : 'font-normal text-[var(--color-text-secondary)] hover:bg-[color-mix(in_srgb,var(--color-text)_8%,transparent)] hover:text-[var(--color-text)]'
+                    ? 'font-medium bg-[color-mix(in_srgb,var(--color-accent-600)_24%,transparent)] text-[var(--color-text)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-accent-600)_45%,transparent)]'
+                    : 'font-normal text-[var(--color-text-muted)] hover:bg-[color-mix(in_srgb,var(--color-text)_8%,transparent)] hover:text-[var(--color-text)]'
                 }`}
               >
                 {label}
@@ -59,12 +59,12 @@ export function NavBar({ active, onNavigate }: NavBarProps) {
             <button
               type="button"
               onClick={() => void signOut()}
-              className="cursor-pointer text-[11px] whitespace-nowrap text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]"
+              className="cursor-pointer text-[11px] whitespace-nowrap text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
             >
               Sign out
             </button>
           </div>
-          <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--color-text)_16%,transparent)] bg-[var(--color-neutral-900)] text-[11.5px] font-medium text-[var(--color-accent-300)]">
+          <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--color-text)_16%,transparent)] bg-[var(--color-surface-2)] text-[11.5px] font-medium text-[var(--color-accent)]">
             {email ? initialsFromEmail(email) : ''}
           </span>
         </div>

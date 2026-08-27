@@ -74,7 +74,7 @@ function AiAvatar() {
 
 function UserAvatar({ initials }: { initials: string }) {
   return (
-    <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--color-text)_16%,transparent)] bg-[var(--color-neutral-900)] text-[11px] font-medium text-[var(--color-accent-300)]">
+    <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--color-text)_16%,transparent)] bg-[var(--color-surface-2)] text-[11px] font-medium text-[var(--color-accent)]">
       {initials}
     </span>
   );
@@ -84,9 +84,9 @@ function AiMessage({ why, question }: { why: string; question: string }) {
   return (
     <div className="flex items-start gap-2.5">
       <AiAvatar />
-      <div className="max-w-[85%] rounded-[var(--radius-md)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-sm)]">
+      <div className="max-w-[85%] rounded-[var(--radius-xl)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-sm)]">
         {why && (
-          <p className="mb-1.5 text-xs text-[var(--color-accent-300)]">
+          <p className="mb-1.5 text-xs text-[var(--color-accent)]">
             Why this matters — {why}
           </p>
         )}
@@ -105,8 +105,8 @@ function UserMessage({
 }) {
   return (
     <div className="flex items-start justify-end gap-2.5">
-      <div className="max-w-[85%] rounded-[var(--radius-md)] bg-[var(--color-accent-800)] p-4 shadow-[var(--shadow-sm)]">
-        <p className="text-sm leading-relaxed text-[var(--color-accent-100)]">
+      <div className="max-w-[85%] rounded-[var(--radius-xl)] bg-[var(--color-surface-muted)] p-4 shadow-[var(--shadow-sm)]">
+        <p className="text-sm leading-relaxed text-[var(--color-text)]">
           {answer}
         </p>
       </div>
@@ -244,12 +244,12 @@ export function CoachingPage({
         <Card className="p-5">
           <h2 className="mb-2 text-base font-medium">{ticket.title}</h2>
 
-          <p className="mb-4 text-sm leading-relaxed text-[var(--color-text-secondary)]">
+          <p className="mb-4 text-sm leading-relaxed text-[var(--color-text-muted)]">
             {ticket.description}
           </p>
 
-          <div className="border-t border-[var(--color-divider)] pt-3.5">
-            <div className="mb-2 text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
+          <div className="border-t border-[var(--color-border-subtle)] pt-3.5">
+            <div className="mb-2 text-[10.5px] tracking-wide text-[var(--color-text-muted)] uppercase">
               Readiness
             </div>
 
@@ -258,7 +258,7 @@ export function CoachingPage({
                 <div key={key} className="flex items-center gap-2.5">
                   <ScoreBadge score={session.currentScores[key]} />
 
-                  <span className="text-xs text-[var(--color-text-secondary)]">
+                  <span className="text-xs text-[var(--color-text-muted)]">
                     {label}
                   </span>
                 </div>
@@ -286,7 +286,7 @@ export function CoachingPage({
                   Coaching complete.
                 </p>
 
-                <p className="mt-1.5 text-sm text-[var(--color-text-secondary)]">
+                <p className="mt-1.5 text-sm text-[var(--color-text-muted)]">
                   {session.stopReason
                     ? (STOP_REASON_LABELS[session.stopReason] ??
                       session.stopReason)
@@ -295,7 +295,7 @@ export function CoachingPage({
               </Card>
 
               {finalizeMutation.isError && (
-                <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-3.5 py-3 text-sm text-[var(--color-danger)]">
+                <div className="rounded-[var(--radius-xl)] border border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-3.5 py-3 text-sm text-[var(--color-danger)]">
                   {finalizeMutation.error instanceof ApiError
                     ? finalizeMutation.error.message
                     : 'Something went wrong. Please try again.'}
@@ -325,7 +325,7 @@ export function CoachingPage({
                   onSubmit={handleSubmitAnswer}
                   className="max-w-[85%] flex-1"
                 >
-                  <div className="rounded-[var(--radius-md)] bg-[var(--color-neutral-900)] p-4 shadow-[var(--shadow-sm)]">
+                  <div className="rounded-[var(--radius-xl)] bg-[var(--color-surface-2)] p-4 shadow-[var(--shadow-sm)]">
                     <Field
                       label="Your Answer"
                       htmlFor="answer"
@@ -345,7 +345,7 @@ export function CoachingPage({
                     </Field>
 
                     {submitMutation.isError && (
-                      <div className="mb-4 rounded-[var(--radius-md)] border border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-3.5 py-3 text-sm text-[var(--color-danger)]">
+                      <div className="mb-4 rounded-[var(--radius-xl)] border border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-3.5 py-3 text-sm text-[var(--color-danger)]">
                         {submitMutation.error instanceof ApiError
                           ? submitMutation.error.message
                           : 'Something went wrong. Please try again.'}

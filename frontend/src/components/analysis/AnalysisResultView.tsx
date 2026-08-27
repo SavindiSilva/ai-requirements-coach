@@ -45,15 +45,17 @@ export function AnalysisResultView({
     <div className="flex flex-col gap-6">
       <Card className="p-5">
         <h2 className="mb-1.5 text-base font-medium">{ticket.title}</h2>
-        <p className="mb-4 text-sm leading-relaxed text-[var(--color-text-secondary)]">
+        <p className="mb-4 text-sm leading-relaxed text-[var(--color-text-muted)]">
           {ticket.description}
         </p>
         <div>
-          <div className="mb-1 text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
+          <div className="mb-1 text-[10.5px] tracking-wide text-[var(--color-text-muted)] uppercase">
             Overall Readiness
           </div>
           <div className="flex items-center gap-3">
-            <div className="text-2xl font-medium">{formatScore(result.overall_readiness)} / 3</div>
+            <div className="font-[family-name:var(--font-mono)] text-2xl font-medium tabular-nums">
+              {formatScore(result.overall_readiness)} / 3
+            </div>
             <span className={badgeClasses(isReady ? 'success' : 'warning')}>
               {isReady ? 'Ready' : 'Needs Clarification'}
             </span>
@@ -69,7 +71,7 @@ export function AnalysisResultView({
 
       <div className="flex flex-col items-start gap-3">
         {startCoachingErrorMessage && (
-          <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-3.5 py-3 text-sm text-[var(--color-danger)]">
+          <div className="rounded-[var(--radius-xl)] border border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-3.5 py-3 text-sm text-[var(--color-danger)]">
             {startCoachingErrorMessage}
           </div>
         )}

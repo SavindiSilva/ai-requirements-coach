@@ -30,7 +30,7 @@ export function CriterionCard({ label, criterion }: CriterionCardProps) {
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className={`h-4 w-4 flex-none text-[var(--color-text-tertiary)] transition-transform duration-150 ${
+          className={`h-4 w-4 flex-none text-[var(--color-text-muted)] transition-transform duration-150 ${
             isExpanded ? 'rotate-180' : ''
           }`}
         >
@@ -38,7 +38,7 @@ export function CriterionCard({ label, criterion }: CriterionCardProps) {
         </svg>
       </button>
       {isExpanded && (
-        <p className="mt-3 text-sm leading-relaxed text-[var(--color-text-secondary)]">
+        <p className="mt-3 text-sm leading-relaxed text-[var(--color-text-muted)]">
           {criterion.evidence}
         </p>
       )}

@@ -62,7 +62,7 @@ export function LoginPage() {
           <h1 className="mb-3 max-w-[420px] text-[27px] leading-[1.25] font-semibold tracking-[-0.015em]">
             Improve your software requirements before development starts
           </h1>
-          <p className="mb-8 text-sm leading-[1.6] text-[var(--color-text-secondary)]">
+          <p className="mb-8 text-sm leading-[1.6] text-[var(--color-text-muted)]">
             AI-powered requirement coaching for software teams.
           </p>
 
@@ -70,7 +70,7 @@ export function LoginPage() {
             {CHECKLIST_ITEMS.map((item) => (
               <div
                 key={item}
-                className="flex items-center gap-2.5 text-sm text-[var(--color-text-secondary)]"
+                className="flex items-center gap-2.5 text-sm text-[var(--color-text-muted)]"
               >
                 <span className="flex h-5 w-5 flex-none items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--color-accent)_18%,transparent)] text-[11px] text-[var(--color-accent)]">
                   ✓
@@ -82,13 +82,13 @@ export function LoginPage() {
         </div>
 
         <Card className="max-w-[420px] p-5">
-          <div className="mb-1 text-[10px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
+          <div className="mb-1 text-[10px] tracking-wide text-[var(--color-text-muted)] uppercase">
             Before
           </div>
-          <div className="mb-4 text-sm text-[var(--color-text-secondary)]">
+          <div className="mb-4 text-sm text-[var(--color-text-muted)]">
             Add notification feature
           </div>
-          <div className="mb-1 text-[10px] tracking-wide text-[var(--color-accent-300)] uppercase">
+          <div className="mb-1 text-[10px] tracking-wide text-[var(--color-accent)] uppercase">
             After Coaching
           </div>
           <div className="text-sm leading-relaxed text-[var(--color-text)]">
@@ -136,7 +136,7 @@ export function LoginPage() {
                 type="button"
                 disabled
                 title="Not available in this demo"
-                className="cursor-not-allowed text-[12.5px] text-[var(--color-text-tertiary)]"
+                className="cursor-not-allowed text-[12.5px] text-[var(--color-text-muted)]"
               >
                 Forgot password?
               </button>
@@ -154,7 +154,7 @@ export function LoginPage() {
 
             <div className="my-5 flex items-center gap-2.5">
               <div className="h-px flex-1 bg-[color-mix(in_srgb,var(--color-text)_12%,transparent)]" />
-              <div className="text-[11px] text-[var(--color-text-tertiary)]">OR</div>
+              <div className="text-[11px] text-[var(--color-text-muted)]">OR</div>
               <div className="h-px flex-1 bg-[color-mix(in_srgb,var(--color-text)_12%,transparent)]" />
             </div>
 
@@ -170,7 +170,7 @@ export function LoginPage() {
             </Button>
           </form>
 
-          <p className="mt-6 text-[13px] text-[var(--color-text-secondary)]">
+          <p className="mt-6 text-[13px] text-[var(--color-text-muted)]">
             {mode === 'sign-in' ? "Don't have an account?" : 'Already have an account?'}{' '}
             <button
               type="button"

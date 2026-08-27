@@ -38,17 +38,17 @@ export function FinalRequirementView({ result, ticket, onBackToJira }: FinalRequ
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Card className="p-5">
-          <div className="mb-2 text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
+          <div className="mb-2 text-[10.5px] tracking-wide text-[var(--color-text-muted)] uppercase">
             Original
           </div>
           <h3 className="mb-1.5 text-sm font-medium">{ticket.title}</h3>
-          <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">
+          <p className="text-sm leading-relaxed text-[var(--color-text-muted)]">
             {ticket.description}
           </p>
         </Card>
 
         <Card className="border border-[var(--color-accent)] p-5">
-          <div className="mb-2 text-[10.5px] tracking-wide text-[var(--color-accent-300)] uppercase">
+          <div className="mb-2 text-[10.5px] tracking-wide text-[var(--color-accent)] uppercase">
             Improved
           </div>
           <p className="text-[15px] leading-relaxed">{final_requirement.user_story}</p>
@@ -61,13 +61,13 @@ export function FinalRequirementView({ result, ticket, onBackToJira }: FinalRequ
       </div>
 
       <Card className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3">
-        <span className="text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
+        <span className="text-[10.5px] tracking-wide text-[var(--color-text-muted)] uppercase">
           Readiness
         </span>
         {CRITERIA.map(({ key, label }) => (
           <span key={key} className="flex items-center gap-1.5">
             <ScoreBadge score={result.current_scores[key]} />
-            <span className="text-xs text-[var(--color-text-secondary)]">{label}</span>
+            <span className="text-xs text-[var(--color-text-muted)]">{label}</span>
           </span>
         ))}
       </Card>
@@ -111,20 +111,20 @@ export function FinalRequirementView({ result, ticket, onBackToJira }: FinalRequ
               <p className="mb-1.5 text-[15px] leading-relaxed text-[var(--color-success)]">
                 {issueKey} was updated in Jira.
               </p>
-              <p className="mb-4 text-sm text-[var(--color-text-secondary)]">
+              <p className="mb-4 text-sm text-[var(--color-text-muted)]">
                 The issue description now contains the full development-ready requirement above.
               </p>
               <Button onClick={onBackToJira}>Back to Issue List</Button>
             </>
           ) : (
             <>
-              <div className="mb-2 text-[10.5px] tracking-wide text-[var(--color-text-tertiary)] uppercase">
+              <div className="mb-2 text-[10.5px] tracking-wide text-[var(--color-text-muted)] uppercase">
                 Push to Jira
               </div>
 
               {!showConfirm && (
                 <>
-                  <p className="mb-4 text-sm text-[var(--color-text-secondary)]">
+                  <p className="mb-4 text-sm text-[var(--color-text-muted)]">
                     Approving will overwrite the description of {issueKey} in Jira with the
                     development-ready requirement above. No other Jira fields are changed.
                   </p>
@@ -140,7 +140,7 @@ export function FinalRequirementView({ result, ticket, onBackToJira }: FinalRequ
                   </p>
 
                   {updateMutation.isError && (
-                    <div className="mb-4 rounded-[var(--radius-md)] border border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-3.5 py-3 text-sm text-[var(--color-danger)]">
+                    <div className="mb-4 rounded-[var(--radius-xl)] border border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-3.5 py-3 text-sm text-[var(--color-danger)]">
                       {updateMutation.error instanceof ApiError
                         ? updateMutation.error.message
                         : 'Something went wrong. Please try again.'}

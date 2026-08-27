@@ -6,5 +6,9 @@ import { badgeClasses } from '../../lib/badgeStyles';
 export function ScoreBadge({ score }: { score: number }) {
   const tone = score <= 1 ? 'warning' : score === 2 ? 'accent' : 'success';
 
-  return <span className={`min-w-[34px] ${badgeClasses(tone)}`}>{score}/3</span>;
+  return (
+    <span className={`min-w-[34px] font-[family-name:var(--font-mono)] tabular-nums ${badgeClasses(tone)}`}>
+      {score}/3
+    </span>
+  );
 }

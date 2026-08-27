@@ -1,41 +1,37 @@
 /*
- * Design tokens ported from the Claude Design prototype's "Nocturne" system
- * (_ds/nocturne-.../styles.css). Source of truth for the visual direction —
- * see docs/architecture.md for how the frontend maps to it.
+ * Design tokens ported 1:1 from the reference prototype spec — hex codes,
+ * gradient stops and shadow values are exact, not approximations. See
+ * docs/architecture.md for how the frontend maps to it.
  */
 
 :root {
-  --color-bg: #161826;
-  --color-surface: #232532;
-  --color-text: #e9e9ed;
-  --color-accent: #9d90ea;
-  --color-accent-2: #a7a1db;
-  --color-accent-600: #6c5ce7;
-  --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
-  --color-border-subtle: color-mix(in srgb, #e9e9ed 9%, transparent);
+  --color-bg: #0b0f1a;
+  --color-text: #f6f9fb;
+  --color-surface: #131824;
+  --color-surface-2: #1b2130; /* secondary surface: inner tiles, chips */
+  --color-surface-muted: #1f2635; /* muted fill: badges, hover states */
 
-  /* Three deliberate text-opacity steps — every "muted" text color in the
-     app should reference one of these two, never a one-off color-mix. */
-  --color-text-secondary: color-mix(in srgb, var(--color-text) 70%, transparent);
-  --color-text-tertiary: color-mix(in srgb, var(--color-text) 46%, transparent);
+  --color-accent-600: #6575fa; /* primary accent: buttons, focus ring, logo */
+  --color-accent: #a57afe; /* violet/AI accent: AI-specific highlights, avatar */
 
-  --color-neutral-100: #f3f5fe;
-  --color-neutral-300: #cfd3e5;
-  --color-neutral-500: #9397ab;
-  --color-neutral-800: #3f424d;
-  --color-neutral-900: #292b31;
+  /* Muted/secondary text is its own defined color, not an opacity step of
+     --color-text — every "muted" text color in the app should reference
+     this single token. */
+  --color-text-muted: #9ea5b2;
 
-  --color-accent-100: #f5f4ff;
-  --color-accent-300: #d2cefd;
-  --color-accent-800: #423a6a;
+  --color-button-primary-text: #fafcfe;
 
-  --color-success: #7cc99a;
-  --color-warning: #e8b463;
-  --color-danger: #e2867a;
+  --color-success: #24c27d;
+  --color-warning: #efad32;
+  --color-danger: #ea3b48;
 
-  --font-heading: 'Inter', system-ui, sans-serif;
-  --font-heading-weight: 600;
-  --font-body: 'Inter', system-ui, sans-serif;
+  --color-border-subtle: rgba(255, 255, 255, 0.09);
+  --color-border-input: rgba(255, 255, 255, 0.12);
+  --color-focus-ring: #6575fa;
+
+  --font-heading: 'Space Grotesk', system-ui, sans-serif;
+  --font-body: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   --space-1: 2.8px;
   --space-2: 5.6px;
@@ -44,34 +40,20 @@
   --space-6: 16.8px;
   --space-8: 22.4px;
 
-  --radius-sm: 6px;
+  --radius-sm: 8px;
   --radius-md: 10px;
-  --radius-lg: 16px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
 
   /* Small containers (chat bubbles, inline panels) — a hint of lift plus a
      hairline border, not just a faked border. */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--color-border-subtle);
 
-  /* Real elevation for Card — shadow does the separating work, the border
-     is just a hairline so it doesn't fight the shadow. */
-  --shadow-card:
-    0 1px 2px rgba(0, 0, 0, 0.45),
-    0 14px 32px -14px rgba(0, 0, 0, 0.6),
-    0 0 0 1px var(--color-border-subtle);
+  /* Card "glass" recipe shadow layer — paired with the background gradient,
+     border and backdrop-filter applied directly on the Card component. */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px -18px rgba(0, 0, 0, 0.7);
   --shadow-card-hover:
-    0 2px 4px rgba(0, 0, 0, 0.5),
-    0 22px 44px -16px rgba(0, 0, 0, 0.65),
-    0 0 0 1px color-mix(in srgb, var(--color-accent) 30%, var(--color-border-subtle));
-
-  --shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0, 0, 0, 0.55);
-  --shadow-accent-glow: 0 0 18px color-mix(in srgb, var(--color-accent) 35%, transparent);
-
-  --shadow-button-primary:
-    0 1px 2px rgba(0, 0, 0, 0.35),
-    0 0 0 1px color-mix(in srgb, var(--color-accent-600) 60%, transparent),
-    0 8px 22px -6px color-mix(in srgb, var(--color-accent-600) 55%, transparent);
-  --shadow-button-primary-hover:
-    0 1px 2px rgba(0, 0, 0, 0.35),
-    0 0 0 1px color-mix(in srgb, var(--color-accent-600) 75%, transparent),
-    0 10px 28px -6px color-mix(in srgb, var(--color-accent-600) 70%, transparent);
+    0 2px 4px rgba(0, 0, 0, 0.45),
+    0 20px 44px -18px rgba(0, 0, 0, 0.75),
+    0 0 0 1px color-mix(in srgb, var(--color-accent-600) 30%, var(--color-border-subtle));
 }

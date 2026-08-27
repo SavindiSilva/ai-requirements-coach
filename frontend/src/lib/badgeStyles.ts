@@ -9,13 +9,13 @@ const toneClasses: Record<BadgeTone, string> = {
   warning: 'bg-[color-mix(in_srgb,var(--color-warning)_16%,transparent)] text-[var(--color-warning)]',
   danger: 'bg-[color-mix(in_srgb,var(--color-danger)_16%,transparent)] text-[var(--color-danger)]',
   accent:
-    'bg-[color-mix(in_srgb,var(--color-accent-600)_24%,transparent)] text-[var(--color-accent-100)]',
-  neutral: 'bg-[var(--color-neutral-800)] text-[var(--color-text-secondary)]',
+    'bg-[color-mix(in_srgb,var(--color-accent-600)_24%,transparent)] text-[var(--color-text)]',
+  neutral: 'bg-[var(--color-surface-muted)] text-[var(--color-text-muted)]',
 };
 
 export function badgeClasses(tone: BadgeTone, size: 'sm' | 'md' = 'md'): string {
   const sizeClasses = size === 'sm' ? 'h-[20px] px-2 text-[11px]' : 'h-[22px] px-2.5 text-xs';
-  return `inline-flex items-center justify-center rounded-[var(--radius-sm)] font-medium whitespace-nowrap ${sizeClasses} ${toneClasses[tone]}`;
+  return `inline-flex items-center justify-center rounded-[var(--radius-md)] font-medium whitespace-nowrap ${sizeClasses} ${toneClasses[tone]}`;
 }
 
 // Jira priorities aren't backed by any color mapping today — this is a

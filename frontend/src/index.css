@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap');
 @import 'tailwindcss';
 @import './styles/tokens.css';
 
@@ -7,22 +7,21 @@ body {
   min-height: 100vh;
   background-color: var(--color-bg);
   background-image:
-    radial-gradient(
-      1100px 620px at 12% -8%,
-      color-mix(in srgb, var(--color-accent) 12%, transparent),
-      transparent 60%
-    ),
-    radial-gradient(
-      900px 640px at 105% 0%,
-      color-mix(in srgb, var(--color-accent-2) 8%, transparent),
-      transparent 55%
-    ),
-    linear-gradient(180deg, color-mix(in srgb, #ffffff 3%, transparent) 0%, transparent 320px);
+    radial-gradient(60rem 40rem at 15% -10%, rgba(101, 117, 250, 0.14), transparent 70%),
+    radial-gradient(50rem 34rem at 95% 0%, rgba(165, 122, 254, 0.1), transparent 70%);
   background-attachment: fixed;
   background-repeat: no-repeat;
   color: var(--color-text);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-heading);
+  letter-spacing: -0.02em;
 }
 
 ::placeholder {
