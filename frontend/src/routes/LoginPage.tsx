@@ -99,7 +99,7 @@ export function LoginPage() {
       </div>
 
       <div className="flex flex-1 items-center justify-center px-[12vw] py-6 lg:px-16">
-        <div className="w-[400px] max-w-full">
+        <div className="w-full max-w-[400px]">
           <form onSubmit={handleSubmit}>
             <Field label="Email" htmlFor="email" error={error ?? undefined}>
               <input

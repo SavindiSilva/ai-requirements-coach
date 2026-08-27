@@ -26,15 +26,15 @@ export function NavBar({ active, onNavigate }: NavBarProps) {
   const email = session?.user.email ?? '';
   return (
     <div className="sticky top-0 z-20 bg-[var(--color-surface)]">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
-        <div className="flex items-center gap-6">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-6 py-3.5">
+        <div className="flex flex-wrap items-center gap-6">
           <div className="flex items-center gap-2.5">
             <Logo className="h-6 w-6 flex-none" />
             <span className="text-sm font-medium font-[family-name:var(--font-body)]">
               ReqPilot
             </span>
           </div>
-          <nav className="flex items-center gap-1">
+          <nav className="flex flex-wrap items-center gap-1">
             {NAV_ITEMS.map(({ screen, label }) => (
               <button
                 key={screen}

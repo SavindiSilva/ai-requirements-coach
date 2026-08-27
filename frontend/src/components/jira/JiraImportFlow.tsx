@@ -154,12 +154,12 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm text-[var(--color-success)]">
           <span className="h-[7px] w-[7px] rounded-full bg-[var(--color-success)]" />
           Jira Connected
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {selectedProjectId && (
             <Button variant="secondary" onClick={handleChangeProject}>
               Change project
@@ -262,6 +262,7 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
                 </div>
 
                 <Card className="overflow-hidden p-0">
+                  <div className="overflow-x-auto">
                   <div className="grid grid-cols-[1fr_110px_120px_110px_130px_90px] gap-3 border-b border-[var(--color-border-subtle)] px-4 py-2 text-[10.5px] tracking-wide text-[var(--color-text-muted)] uppercase">
                     <div>Ticket</div>
                     <div>Jira Status</div>
@@ -311,6 +312,7 @@ export function JiraImportFlow({ onTicketReady }: JiraImportFlowProps) {
                       </div>
                     );
                   })}
+                  </div>
                   {filteredIssues && filteredIssues.length === 0 && (
                     <div className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
                       No tickets match your filters.
